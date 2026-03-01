@@ -1,87 +1,212 @@
-import { LucidePhone, LucidePhoneIncoming, LucidePhoneMissed, LucidePhoneOutgoing, LucideVideo } from 'lucide-react-native';
-import React from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSelector } from 'react-redux';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+    Alert,
+    FlatList,
+    LayoutAnimation,
+    Modal,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    UIManager,
+    View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useDispatch, useSelector } from 'react-redux';
 import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
+import { clearCallLog, deleteCall } from '../../store/slices/callSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Call } from '../../types';
 
+if (Platform.OS === 'android') {
+    if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+}
+
+// Components
+import CallHistoryItem from '../../components/calls/CallHistoryItem';
+import CallsHeader from '../../components/calls/CallsHeader';
+import EmptyCallsState from '../../components/calls/EmptyCallsState';
+
 const CallListScreen = ({ navigation }: any) => {
+    const dispatch = useDispatch();
     const { calls } = useSelector((state: RootState) => state.call);
     const { chats } = useSelector((state: RootState) => state.chat);
 
-    // In a real app, users would be in a separate slice, for now we map from chats
-    const getUserInfo = (userId: string) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCall, setSelectedCall] = useState<Call | null>(null);
+    const [contextMenuVisible, setContextMenuVisible] = useState(false);
+
+    // Get user info from chats
+    const getUserInfo = useCallback((userId: string) => {
         const chat = chats.find(c => c.participants.includes(userId));
         return {
             name: chat?.name || 'Unknown',
-            avatar: chat?.avatar || 'https://i.pravatar.cc/150',
+            avatar: chat?.avatar || `https://i.pravatar.cc/150?u=${userId}`,
+            userId
         };
-    };
+    }, [chats]);
 
-    const handleCallPress = (call: Call) => {
-        // Here we could open Call Detail UI or initiate a new call
-        // For now, let's just simulate initiating a new call of the same type
+    // Group calls by date and filter by search
+    const groupedCalls = useMemo(() => {
+        const filtered = calls.filter(call => {
+            const otherUserId = call.participants.find(id => id !== '1') || '2';
+            const user = getUserInfo(otherUserId);
+            return user.name.toLowerCase().includes(searchQuery.toLowerCase());
+        });
+
+        const groups: { [key: string]: Call[] } = {};
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const yesterday = today - 86400000;
+
+        filtered.forEach(call => {
+            const callDate = new Date(call.timestamp);
+            const callTime = new Date(callDate.getFullYear(), callDate.getMonth(), callDate.getDate()).getTime();
+
+            let label = 'Older';
+            if (callTime === today) label = 'Today';
+            else if (callTime === yesterday) label = 'Yesterday';
+
+            if (!groups[label]) groups[label] = [];
+            groups[label].push(call);
+        });
+
+        // Convert to array format for FlatList
+        const result: any[] = [];
+        if (groups['Today']) {
+            result.push({ type: 'header', title: 'Today' });
+            result.push(...groups['Today'].map(c => ({ ...c, type: 'item' })));
+        }
+        if (groups['Yesterday']) {
+            result.push({ type: 'header', title: 'Yesterday' });
+            result.push(...groups['Yesterday'].map(c => ({ ...c, type: 'item' })));
+        }
+        if (groups['Older']) {
+            result.push({ type: 'header', title: 'Older' });
+            result.push(...groups['Older'].map(c => ({ ...c, type: 'item' })));
+        }
+
+        return result;
+    }, [calls, searchQuery, getUserInfo]);
+
+    const handleCallPress = useCallback((call: Call) => {
+        const otherUserId = call.participants.find(id => id !== '1') || '2';
         if (call.type === 'voice') {
-            navigation.navigate('VoiceCall', { userId: call.participants.find(id => id !== '1') });
+            navigation.navigate('VoiceCall', { userId: otherUserId });
         } else {
-            navigation.navigate('VideoCall', { userId: call.participants.find(id => id !== '1') });
+            navigation.navigate('VideoCall', { userId: otherUserId });
+        }
+    }, [navigation]);
+
+    const handleLongPress = useCallback((call: Call) => {
+        setSelectedCall(call);
+        setContextMenuVisible(true);
+    }, []);
+
+    const handleDeleteCall = () => {
+        if (selectedCall) {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            dispatch(deleteCall(selectedCall.id));
+            setContextMenuVisible(false);
+            setSelectedCall(null);
         }
     };
 
-    const renderItem = ({ item }: { item: Call }) => {
-        const otherUserId = item.participants.find(id => id !== '1') || '2';
+    const handleViewContact = () => {
+        if (selectedCall) {
+            const otherUserId = selectedCall.participants.find(id => id !== '1') || '2';
+            setContextMenuVisible(false);
+            navigation.navigate('UserInfo', { userId: otherUserId });
+        }
+    };
+
+    const handleClearLog = () => {
+        Alert.alert(
+            "Clear call log",
+            "Are you sure you want to clear your entire call log?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Clear",
+                    style: "destructive",
+                    onPress: () => dispatch(clearCallLog())
+                }
+            ]
+        );
+    };
+
+    const renderItem = ({ item }: { item: any }) => {
+        if (item.type === 'header') {
+            return (
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionHeaderText}>{item.title}</Text>
+                </View>
+            );
+        }
+
+        const otherUserId = item.participants.find((id: string) => id !== '1') || '2';
         const user = getUserInfo(otherUserId);
 
-        const isMissed = item.status === 'missed';
-
-        let CallIcon = LucidePhone;
-        let iconColor = theme.colors.text.secondary;
-
-        if (isMissed) {
-            CallIcon = LucidePhoneMissed;
-            iconColor = theme.colors.error;
-        } else if (item.status === 'incoming') {
-            CallIcon = LucidePhoneIncoming;
-        } else if (item.status === 'outgoing') {
-            CallIcon = LucidePhoneOutgoing;
-        }
-
         return (
-            <View style={styles.callItem}>
-                <Image source={{ uri: user.avatar }} style={styles.avatar} />
-                <View style={styles.callInfo}>
-                    <Text style={[styles.callName, isMissed && styles.missedCallName]}>{user.name}</Text>
-                    <View style={styles.callDetails}>
-                        <CallIcon size={14} color={iconColor} style={styles.statusIcon} />
-                        <Text style={styles.callTime}>
-                            {new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                        </Text>
-                    </View>
-                </View>
-                <TouchableOpacity onPress={() => handleCallPress(item)} style={styles.actionButton}>
-                    {item.type === 'video' ?
-                        <LucideVideo size={24} color={theme.colors.accent} /> :
-                        <LucidePhone size={24} color={theme.colors.accent} />
-                    }
-                </TouchableOpacity>
-            </View>
+            <CallHistoryItem
+                item={item}
+                user={user}
+                onPress={() => handleCallPress(item)}
+                onLongPress={() => handleLongPress(item)}
+                onCallPress={() => handleCallPress(item)}
+            />
         );
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Calls</Text>
-            </View>
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar barStyle="light-content" />
+
+            <CallsHeader
+                onSearchChange={setSearchQuery}
+                onClearLog={handleClearLog}
+                onGoToSettings={() => navigation.navigate('Settings')}
+            />
+
             <FlatList
-                data={calls}
-                keyExtractor={item => item.id}
+                data={groupedCalls}
+                keyExtractor={(item, index) => (item.id || item.title) + index}
                 renderItem={renderItem}
                 contentContainerStyle={styles.listContainer}
+                ListEmptyComponent={<EmptyCallsState />}
+                showsVerticalScrollIndicator={false}
             />
-        </View>
+
+            {/* Context Menu Modal */}
+            <Modal
+                transparent
+                visible={contextMenuVisible}
+                onRequestClose={() => setContextMenuVisible(false)}
+                animationType="fade"
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setContextMenuVisible(false)}
+                >
+                    <View style={styles.contextMenu}>
+                        <TouchableOpacity style={styles.menuOption} onPress={handleViewContact}>
+                            <Text style={styles.menuText}>View contact</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.menuOption, styles.destructiveOption]}
+                            onPress={handleDeleteCall}
+                        >
+                            <Text style={[styles.menuText, styles.destructiveText]}>Delete call</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+        </SafeAreaView>
     );
 };
 
@@ -90,62 +215,59 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    header: {
-        marginTop: 48,
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    headerTitle: {
-        color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.xl,
-        fontWeight: theme.typography.weights.bold as any,
-    },
     listContainer: {
-        paddingVertical: theme.spacing.sm,
-        paddingBottom: TAB_BAR_HEIGHT,
+        paddingBottom: TAB_BAR_HEIGHT + 20,
     },
-    callItem: {
-        flexDirection: 'row',
-        padding: theme.spacing.md,
+    sectionHeader: {
+        backgroundColor: theme.colors.secondary,
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        marginTop: 5,
+    },
+    sectionHeaderText: {
+        color: theme.colors.text.secondary,
+        fontSize: 13,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
         alignItems: 'center',
     },
-    avatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        marginRight: theme.spacing.md,
+    contextMenu: {
+        backgroundColor: theme.colors.surface,
+        borderRadius: 14,
+        paddingVertical: 6,
+        width: '80%',
+        maxWidth: 300,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
     },
-    callInfo: {
-        flex: 1,
-        borderBottomWidth: 0.5,
+    menuOption: {
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: theme.colors.border,
-        paddingBottom: theme.spacing.md,
     },
-    callName: {
+    destructiveOption: {
+        borderBottomWidth: 0,
+    },
+    menuText: {
         color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.lg,
-        fontWeight: theme.typography.weights.semibold as any,
-        marginBottom: 4,
+        fontSize: 17,
+        fontWeight: '500',
+        textAlign: 'center',
     },
-    missedCallName: {
+    destructiveText: {
         color: theme.colors.error,
     },
-    callDetails: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    statusIcon: {
-        marginRight: 4,
-    },
-    callTime: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
-    },
-    actionButton: {
-        padding: theme.spacing.sm,
-    }
 });
 
 export default CallListScreen;

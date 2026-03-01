@@ -59,8 +59,14 @@ const callSlice = createSlice({
                 state.activeCall.status = action.payload.status;
             }
         },
+        deleteCall: (state, action: PayloadAction<string>) => {
+            state.calls = state.calls.filter(c => c.id !== action.payload);
+        },
+        clearCallLog: (state) => {
+            state.calls = [];
+        },
     },
 });
 
-export const { setCalls, setActiveCall, addCall, updateCallStatus } = callSlice.actions;
+export const { setCalls, setActiveCall, addCall, updateCallStatus, deleteCall, clearCallLog } = callSlice.actions;
 export default callSlice.reducer;
