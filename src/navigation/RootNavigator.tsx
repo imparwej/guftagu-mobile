@@ -8,8 +8,11 @@ import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import VideoCallScreen from '../screens/calls/VideoCallScreen';
 import VoiceCallScreen from '../screens/calls/VoiceCallScreen';
+import ChatScreen from '../screens/chats/ChatScreen';
+import ContactListScreen from '../screens/chats/ContactListScreen';
 import GroupInfoScreen from '../screens/chats/GroupInfoScreen';
 import UserInfoScreen from '../screens/chats/UserInfoScreen';
+import LinkedDevicesScreen from '../screens/devices/LinkedDevicesScreen';
 import StatusViewerScreen from '../screens/status/StatusViewerScreen';
 import { RootState } from '../store/store';
 import TabNavigator from './TabNavigator';
@@ -42,6 +45,16 @@ const RootNavigator = () => {
                 <>
                     <Stack.Screen name="Main" component={TabNavigator} />
                     <Stack.Screen
+                        name="ContactList"
+                        component={ContactListScreen}
+                        options={{ animation: 'slide_from_bottom' }}
+                    />
+                    <Stack.Screen
+                        name="Chat"
+                        component={ChatScreen}
+                        options={{ animation: 'slide_from_right' }}
+                    />
+                    <Stack.Screen
                         name="VoiceCall"
                         component={VoiceCallScreen}
                         options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
@@ -64,6 +77,11 @@ const RootNavigator = () => {
                     <Stack.Screen
                         name="GroupInfo"
                         component={GroupInfoScreen}
+                        options={{ animation: 'slide_from_right' }}
+                    />
+                    <Stack.Screen
+                        name="LinkedDevices"
+                        component={LinkedDevicesScreen}
                         options={{ animation: 'slide_from_right' }}
                     />
                 </>

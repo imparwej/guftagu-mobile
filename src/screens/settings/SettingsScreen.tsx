@@ -13,6 +13,7 @@ import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
+import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 
@@ -37,7 +38,7 @@ const SettingsScreen = ({ navigation }: any) => {
                 <Text style={styles.headerTitle}>Settings</Text>
             </View>
 
-            <ScrollView style={styles.content}>
+            <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT }}>
                 <TouchableOpacity style={styles.profileSection}>
                     <Image source={{ uri: user?.avatar || 'https://i.pravatar.cc/150?u=me' }} style={styles.avatar} />
                     <View style={styles.profileInfo}>

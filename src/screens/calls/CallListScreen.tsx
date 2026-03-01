@@ -2,6 +2,7 @@ import { LucidePhone, LucidePhoneIncoming, LucidePhoneMissed, LucidePhoneOutgoin
 import React from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSelector } from 'react-redux';
+import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Call } from '../../types';
@@ -103,6 +104,7 @@ const styles = StyleSheet.create({
     },
     listContainer: {
         paddingVertical: theme.spacing.sm,
+        paddingBottom: TAB_BAR_HEIGHT,
     },
     callItem: {
         flexDirection: 'row',

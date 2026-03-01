@@ -8,91 +8,14 @@ interface ChatState {
 }
 
 const dummyChats: Chat[] = [
-    {
-        id: '1',
-        participants: ['1', '2'],
-        lastMessageId: 'm1',
-        unreadCount: 2,
-        type: 'individual',
-        name: 'Alice',
-        avatar: 'https://i.pravatar.cc/150?u=2',
-        isPinned: true,
-        isGroup: false,
-    },
-    {
-        id: '2',
-        participants: ['1', '3'],
-        lastMessageId: 'm2',
-        unreadCount: 0,
-        type: 'individual',
-        name: 'Bob',
-        avatar: 'https://i.pravatar.cc/150?u=3',
-        isGroup: false,
-    },
-    {
-        id: '3',
-        participants: ['1', '4', '5', '6'],
-        lastMessageId: 'm3',
-        unreadCount: 5,
-        type: 'group',
-        name: 'Design Team',
-        avatar: 'https://i.pravatar.cc/150?u=team1',
-        isPinned: true,
-        isGroup: true,
-        groupMembers: ['1', '4', '5', '6'],
-    },
-    {
-        id: '4',
-        participants: ['1', '7'],
-        lastMessageId: 'm4',
-        unreadCount: 1,
-        type: 'individual',
-        name: 'David',
-        avatar: 'https://i.pravatar.cc/150?u=7',
-        isGroup: false,
-    },
-    {
-        id: '5',
-        participants: ['1', '8'],
-        lastMessageId: 'm5',
-        unreadCount: 0,
-        type: 'individual',
-        name: 'Emma',
-        avatar: 'https://i.pravatar.cc/150?u=8',
-        isMuted: true,
-        isGroup: false,
-    },
-    {
-        id: '6',
-        participants: ['1', '9', '10', '11', '12'],
-        lastMessageId: 'm6',
-        unreadCount: 12,
-        type: 'group',
-        name: 'Weekend Plans',
-        avatar: 'https://i.pravatar.cc/150?u=team2',
-        isGroup: true,
-        groupMembers: ['1', '9', '10', '11', '12'],
-    },
-    {
-        id: '7',
-        participants: ['1', '13'],
-        lastMessageId: 'm7',
-        unreadCount: 0,
-        type: 'individual',
-        name: 'Sophia',
-        avatar: 'https://i.pravatar.cc/150?u=13',
-        isGroup: false,
-    },
-    {
-        id: '8',
-        participants: ['1', '14'],
-        lastMessageId: 'm8',
-        unreadCount: 3,
-        type: 'individual',
-        name: 'James',
-        avatar: 'https://i.pravatar.cc/150?u=14',
-        isGroup: false,
-    },
+    { id: '1', participants: ['1', '2'], lastMessageId: 'm1', unreadCount: 2, type: 'individual', name: 'Alice', avatar: 'https://i.pravatar.cc/150?u=2', isPinned: true, isGroup: false },
+    { id: '2', participants: ['1', '3'], lastMessageId: 'm2', unreadCount: 0, type: 'individual', name: 'Bob', avatar: 'https://i.pravatar.cc/150?u=3', isGroup: false },
+    { id: '3', participants: ['1', '4', '5', '6'], lastMessageId: 'm3', unreadCount: 5, type: 'group', name: 'Design Team', avatar: 'https://i.pravatar.cc/150?u=team1', isPinned: true, isGroup: true, groupMembers: ['1', '4', '5', '6'] },
+    { id: '4', participants: ['1', '7'], lastMessageId: 'm4', unreadCount: 1, type: 'individual', name: 'David', avatar: 'https://i.pravatar.cc/150?u=7', isGroup: false },
+    { id: '5', participants: ['1', '8'], lastMessageId: 'm5', unreadCount: 0, type: 'individual', name: 'Emma', avatar: 'https://i.pravatar.cc/150?u=8', isMuted: true, isGroup: false },
+    { id: '6', participants: ['1', '9', '10', '11', '12'], lastMessageId: 'm6', unreadCount: 12, type: 'group', name: 'Weekend Plans', avatar: 'https://i.pravatar.cc/150?u=team2', isGroup: true, groupMembers: ['1', '9', '10', '11', '12'] },
+    { id: '7', participants: ['1', '13'], lastMessageId: 'm7', unreadCount: 0, type: 'individual', name: 'Sophia', avatar: 'https://i.pravatar.cc/150?u=13', isGroup: false },
+    { id: '8', participants: ['1', '14'], lastMessageId: 'm8', unreadCount: 3, type: 'individual', name: 'James', avatar: 'https://i.pravatar.cc/150?u=14', isGroup: false },
 ];
 
 const dummyMessages: Record<string, Message[]> = {
@@ -162,6 +85,21 @@ const chatSlice = createSlice({
                 }
             }
         },
+        deleteMessage: (state, action: PayloadAction<{ chatId: string; messageId: string }>) => {
+            const chatMessages = state.messages[action.payload.chatId];
+            if (chatMessages) {
+                state.messages[action.payload.chatId] = chatMessages.filter(m => m.id !== action.payload.messageId);
+            }
+        },
+        starMessage: (state, action: PayloadAction<{ chatId: string; messageId: string }>) => {
+            const chatMessages = state.messages[action.payload.chatId];
+            if (chatMessages) {
+                const msg = chatMessages.find(m => m.id === action.payload.messageId);
+                if (msg) {
+                    msg.isStarred = !msg.isStarred;
+                }
+            }
+        },
         togglePin: (state, action: PayloadAction<string[]>) => {
             action.payload.forEach(id => {
                 const chat = state.chats.find(c => c.id === id);
@@ -173,6 +111,30 @@ const chatSlice = createSlice({
                 const chat = state.chats.find(c => c.id === id);
                 if (chat) chat.isMuted = !chat.isMuted;
             });
+        },
+        blockChat: (state, action: PayloadAction<string>) => {
+            const chat = state.chats.find(c => c.id === action.payload);
+            if (chat) chat.isBlocked = true;
+        },
+        unblockChat: (state, action: PayloadAction<string>) => {
+            const chat = state.chats.find(c => c.id === action.payload);
+            if (chat) chat.isBlocked = false;
+        },
+        setWallpaper: (state, action: PayloadAction<{ chatId: string; wallpaper: string | undefined }>) => {
+            const chat = state.chats.find(c => c.id === action.payload.chatId);
+            if (chat) chat.wallpaper = action.payload.wallpaper;
+        },
+        updateChatName: (state, action: PayloadAction<{ chatId: string; name: string }>) => {
+            const chat = state.chats.find(c => c.id === action.payload.chatId);
+            if (chat) chat.name = action.payload.name;
+        },
+        exitGroup: (state, action: PayloadAction<string>) => {
+            // Remove current user from group and delete from chats list
+            state.chats = state.chats.filter(c => c.id !== action.payload);
+            delete state.messages[action.payload];
+            if (state.activeChatId === action.payload) {
+                state.activeChatId = null;
+            }
         },
         deleteChats: (state, action: PayloadAction<string[]>) => {
             state.chats = state.chats.filter(c => !action.payload.includes(c.id));
@@ -197,6 +159,11 @@ const chatSlice = createSlice({
                 chat.unreadCount = 0;
             }
         },
+        addChat: (state, action: PayloadAction<Chat>) => {
+            if (!state.chats.find(c => c.id === action.payload.id)) {
+                state.chats.unshift(action.payload);
+            }
+        },
     },
 });
 
@@ -206,12 +173,20 @@ export const {
     addMessage,
     setMessages,
     updateMessageStatus,
+    deleteMessage,
+    starMessage,
     togglePin,
     toggleMute,
+    blockChat,
+    unblockChat,
+    setWallpaper,
+    updateChatName,
+    exitGroup,
     deleteChats,
     markAsRead,
     markAllAsRead,
     clearChat,
+    addChat,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

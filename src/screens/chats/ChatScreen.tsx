@@ -1,236 +1,590 @@
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    LucideArrowLeft,
-    LucideCamera,
-    LucideFile,
-    LucideImage,
-    LucideMapPin,
-    LucideMic,
-    LucideMoreVertical,
-    LucidePlus,
-    LucideSend,
-    LucideUser,
-    LucideX
-} from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
-import {
-    Dimensions,
+    Alert,
     FlatList,
-    Image,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     StatusBar,
     StyleSheet,
     Text,
-    TextInput,
-    View
+    View,
 } from 'react-native';
-import Animated, {
-    FadeInDown,
-    FadeInLeft,
-    FadeInRight,
-    FadeOutDown,
-    Layout
-} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-import PressableScale from '../../components/PressableScale';
-import { addMessage, updateMessageStatus } from '../../store/slices/chatSlice';
+import {
+    addMessage,
+    blockChat,
+    clearChat,
+    deleteMessage,
+    exitGroup,
+    setWallpaper,
+    starMessage,
+    toggleMute,
+    unblockChat,
+    updateMessageStatus,
+} from '../../store/slices/chatSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
+import { Message } from '../../types';
+import AttachmentPanel from './components/AttachmentPanel';
+import ChatHeader from './components/ChatHeader';
+import ChatHeaderMenu from './components/ChatHeaderMenu';
+import ChatInputBar from './components/ChatInputBar';
+import ChatSearchBar from './components/ChatSearchBar';
+import EmojiPicker from './components/EmojiPicker';
+import MessageBubble from './components/MessageBubble';
+import MessageLongPressMenu from './components/MessageLongPressMenu';
+import TypingIndicator from './components/TypingIndicator';
+import VoiceRecorder from './components/VoiceRecorder';
+import WallpaperPicker from './components/WallpaperPicker';
 
-const { width } = Dimensions.get('window');
+const AUTO_REPLIES = [
+    'Got it, thanks! 👍',
+    'That sounds great!',
+    'Let me think about it...',
+    'Sure, I\'ll get back to you.',
+    'Interesting!',
+    'Haha, nice one 😄',
+    'Absolutely!',
+    'I\'ll check and let you know.',
+];
 
 const ChatScreen = ({ navigation }: any) => {
     const [text, setText] = useState('');
     const [showAttachments, setShowAttachments] = useState(false);
+    const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+    const [longPressMessage, setLongPressMessage] = useState<Message | null>(null);
+    const [isTyping, setIsTyping] = useState(false);
+    const [showEmoji, setShowEmoji] = useState(false);
+    const [isRecording, setIsRecording] = useState(false);
+    const [showSearch, setShowSearch] = useState(false);
+    const [showWallpaper, setShowWallpaper] = useState(false);
+    const [highlightedMessageIds, setHighlightedMessageIds] = useState<string[]>([]);
+    const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
     const dispatch = useDispatch();
     const { activeChatId, chats, messages } = useSelector((state: RootState) => state.chat);
     const currentUser = useSelector((state: RootState) => state.auth.user);
+    const insets = useSafeAreaInsets();
 
     const chat = chats.find(c => c.id === activeChatId);
     const chatMessages = activeChatId ? messages[activeChatId] || [] : [];
+    const isGroup = chat?.isGroup || chat?.type === 'group';
+    const isBlocked = chat?.isBlocked || false;
 
     const flatListRef = useRef<FlatList>(null);
 
-    const handleSend = () => {
-        if (!text.trim() || !activeChatId) return;
-
+    // ──────── SEND MESSAGE ────────
+    const sendMessage = useCallback((msgOverrides: Partial<Message> = {}) => {
+        if (!activeChatId) return;
         const senderId = currentUser?.id || 'me';
         const newMsgId = Date.now().toString();
 
-        dispatch(addMessage({
+        const msg: Message = {
             id: newMsgId,
             chatId: activeChatId,
-            senderId: senderId,
-            text: text.trim(),
+            senderId,
             timestamp: new Date().toISOString(),
             status: 'sent',
-        }));
+            replyTo: replyingTo?.id,
+            ...msgOverrides,
+        };
 
-        setText('');
-        setShowAttachments(false);
+        dispatch(addMessage(msg));
+        setReplyingTo(null);
 
-        // Simulate message lifecycle
+        // Lifecycle simulation
         setTimeout(() => {
             dispatch(updateMessageStatus({ chatId: activeChatId, messageId: newMsgId, status: 'delivered' }));
             setTimeout(() => {
                 dispatch(updateMessageStatus({ chatId: activeChatId, messageId: newMsgId, status: 'read' }));
             }, 2000);
         }, 1500);
-    };
+    }, [activeChatId, currentUser, replyingTo, dispatch]);
 
+    const handleSendText = useCallback(() => {
+        if (!text.trim() || isBlocked) return;
+        sendMessage({ text: text.trim() });
+        setText('');
+        setShowAttachments(false);
+        setShowEmoji(false);
+
+        // Typing simulation
+        setTimeout(() => {
+            setIsTyping(true);
+            setTimeout(() => {
+                setIsTyping(false);
+                if (!activeChatId) return;
+                dispatch(addMessage({
+                    id: (Date.now() + 1).toString(),
+                    chatId: activeChatId,
+                    senderId: chat?.participants?.[1] || 'other',
+                    text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
+                    timestamp: new Date().toISOString(),
+                    status: 'read',
+                }));
+            }, 2500);
+        }, 1800);
+    }, [text, isBlocked, activeChatId, chat, sendMessage, dispatch]);
+
+    // ──────── AUTO-SCROLL ────────
     useEffect(() => {
         if (flatListRef.current && chatMessages.length > 0) {
             setTimeout(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
+            }, 150);
         }
-    }, [chatMessages.length]);
+    }, [chatMessages.length, isTyping]);
+
+    // ──────── HEADER ACTIONS ────────
+    const handleBack = useCallback(() => navigation.goBack(), [navigation]);
+
+    const handleInfoPress = useCallback(() => {
+        if (isGroup) {
+            navigation.navigate('GroupInfo', { chatId: activeChatId });
+        } else {
+            navigation.navigate('UserInfo', { userId: chat?.participants?.[1] });
+        }
+    }, [navigation, isGroup, activeChatId, chat]);
+
+    const handleCallPress = useCallback(() => {
+        navigation.navigate('VoiceCall', { chatId: activeChatId });
+    }, [navigation, activeChatId]);
+
+    const handleVideoPress = useCallback(() => {
+        navigation.navigate('VideoCall', { chatId: activeChatId });
+    }, [navigation, activeChatId]);
+
+    // ──────── HEADER MENU ────────
+    const handleMenuAction = useCallback((action: string) => {
+        if (!activeChatId) return;
+        switch (action) {
+            case 'view_contact':
+                navigation.navigate('UserInfo', { userId: chat?.participants?.[1] });
+                break;
+            case 'view_group':
+                navigation.navigate('GroupInfo', { chatId: activeChatId });
+                break;
+            case 'search':
+                setShowSearch(true);
+                break;
+            case 'mute':
+                dispatch(toggleMute([activeChatId]));
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                break;
+            case 'wallpaper':
+                setShowWallpaper(true);
+                break;
+            case 'clear_chat':
+                Alert.alert('Clear Chat', 'Are you sure you want to clear all messages?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Clear', style: 'destructive', onPress: () => dispatch(clearChat(activeChatId)) },
+                ]);
+                break;
+            case 'block':
+                if (isBlocked) {
+                    dispatch(unblockChat(activeChatId));
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                } else {
+                    Alert.alert('Block Contact', 'You will no longer be able to send or receive messages.', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Block', style: 'destructive', onPress: () => {
+                                dispatch(blockChat(activeChatId));
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                            }
+                        },
+                    ]);
+                }
+                break;
+            case 'exit_group':
+                Alert.alert('Exit Group', 'You will no longer receive messages from this group.', [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Exit', style: 'destructive', onPress: () => {
+                            dispatch(exitGroup(activeChatId));
+                            navigation.goBack();
+                        }
+                    },
+                ]);
+                break;
+        }
+    }, [activeChatId, navigation, chat, isBlocked, dispatch]);
+
+    // ──────── LONG PRESS ────────
+    const handleMessageLongPress = useCallback((message: Message) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setLongPressMessage(message);
+    }, []);
+
+    const handleLongPressAction = useCallback((action: string) => {
+        if (!longPressMessage || !activeChatId) return;
+
+        switch (action) {
+            case 'reply':
+                setReplyingTo(longPressMessage);
+                break;
+            case 'copy':
+                if (longPressMessage.text) {
+                    Clipboard.setStringAsync(longPressMessage.text);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                }
+                break;
+            case 'delete':
+                dispatch(deleteMessage({ chatId: activeChatId, messageId: longPressMessage.id }));
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                break;
+            case 'star':
+                dispatch(starMessage({ chatId: activeChatId, messageId: longPressMessage.id }));
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                break;
+            case 'forward':
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                break;
+            case 'info':
+                break;
+        }
+        setLongPressMessage(null);
+    }, [longPressMessage, activeChatId, dispatch]);
+
+    // ──────── ATTACHMENT ACTIONS ────────
+    const handleAttachmentSelect = useCallback(async (type: string) => {
+        if (!activeChatId || isBlocked) return;
+        setShowAttachments(false);
+
+        switch (type) {
+            case 'gallery': {
+                const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images'],
+                    quality: 0.8,
+                });
+                if (!result.canceled && result.assets?.[0]) {
+                    sendMessage({
+                        mediaType: 'image',
+                        mediaUri: result.assets[0].uri,
+                        text: undefined,
+                    });
+                }
+                break;
+            }
+            case 'camera': {
+                const perm = await ImagePicker.requestCameraPermissionsAsync();
+                if (!perm.granted) {
+                    Alert.alert('Permission needed', 'Camera access is required.');
+                    return;
+                }
+                const result = await ImagePicker.launchCameraAsync({
+                    quality: 0.8,
+                });
+                if (!result.canceled && result.assets?.[0]) {
+                    sendMessage({
+                        mediaType: 'image',
+                        mediaUri: result.assets[0].uri,
+                        text: undefined,
+                    });
+                }
+                break;
+            }
+            case 'document':
+                sendMessage({
+                    mediaType: 'document',
+                    fileName: 'Report_Q4_2025.pdf',
+                    fileSize: '2.4 MB',
+                    text: undefined,
+                });
+                break;
+            case 'location':
+                sendMessage({
+                    mediaType: 'location',
+                    latitude: 28.6139,
+                    longitude: 77.2090,
+                    text: 'New Delhi, India',
+                });
+                break;
+            case 'contact':
+                sendMessage({
+                    mediaType: 'contact',
+                    contactName: 'John Smith',
+                    contactPhone: '+1 555 123 4567',
+                    text: undefined,
+                });
+                break;
+        }
+    }, [activeChatId, isBlocked, sendMessage]);
+
+    // ──────── CAMERA SHORTCUT ────────
+    const handleCameraPress = useCallback(async () => {
+        if (isBlocked) return;
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+            Alert.alert('Permission needed', 'Camera access is required.');
+            return;
+        }
+        const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+        if (!result.canceled && result.assets?.[0]) {
+            sendMessage({
+                mediaType: 'image',
+                mediaUri: result.assets[0].uri,
+                text: undefined,
+            });
+        }
+    }, [isBlocked, sendMessage]);
+
+    // ──────── VOICE RECORDING ────────
+    const handleMicPress = useCallback(() => {
+        if (isBlocked) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setIsRecording(true);
+        setShowEmoji(false);
+        setShowAttachments(false);
+    }, [isBlocked]);
+
+    const handleVoiceSend = useCallback((duration: number) => {
+        setIsRecording(false);
+        sendMessage({
+            mediaType: 'voice',
+            voiceDuration: duration,
+            text: undefined,
+        });
+    }, [sendMessage]);
+
+    // ──────── EMOJI ────────
+    const handleEmojiPress = useCallback(() => {
+        Keyboard.dismiss();
+        setShowEmoji(prev => !prev);
+        setShowAttachments(false);
+    }, []);
+
+    const handleEmojiSelect = useCallback((emoji: string) => {
+        setText(prev => prev + emoji);
+    }, []);
+
+    // ──────── SEARCH ────────
+    const handleScrollToIndex = useCallback((index: number) => {
+        flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+    }, []);
+
+    // ──────── WALLPAPER ────────
+    const handleWallpaperSelect = useCallback((wallpaper: string | undefined) => {
+        if (!activeChatId) return;
+        dispatch(setWallpaper({ chatId: activeChatId, wallpaper }));
+    }, [activeChatId, dispatch]);
+
+    // ──────── STATUS TEXT ────────
+    const getStatusText = () => {
+        if (isBlocked) return 'blocked';
+        if (isTyping) return 'typing...';
+        return 'online';
+    };
+
+    // ──────── RENDER MESSAGE ────────
+    const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
+        const isMine = item.senderId === 'me' || item.senderId === currentUser?.id;
+        const prevMsg = index > 0 ? chatMessages[index - 1] : null;
+        const nextMsg = index < chatMessages.length - 1 ? chatMessages[index + 1] : null;
+        const isFirstInGroup = !prevMsg || prevMsg.senderId !== item.senderId;
+        const isLastInGroup = !nextMsg || nextMsg.senderId !== item.senderId;
+
+        let senderName: string | undefined;
+        if (isGroup && !isMine) {
+            const names: Record<string, string> = {
+                '2': 'Alice', '3': 'Bob', '4': 'Carol', '5': 'Dave',
+                '6': 'Eve', '7': 'Frank', '8': 'Grace', '9': 'Heidi',
+                '10': 'Ivan', '11': 'Judy', '12': 'Karl', '13': 'Leo', '14': 'Mia',
+            };
+            senderName = names[item.senderId] || `User ${item.senderId}`;
+        }
+
+        let replyPreviewText: string | undefined;
+        if (item.replyTo) {
+            const repliedMsg = chatMessages.find(m => m.id === item.replyTo);
+            replyPreviewText = repliedMsg?.text || 'Message';
+        }
+
+        const isHighlighted = highlightedMessageIds.includes(item.id);
+
+        return (
+            <MessageBubble
+                message={item}
+                isMine={isMine}
+                isGroup={isGroup || false}
+                senderName={senderName}
+                isFirstInGroup={isFirstInGroup}
+                isLastInGroup={isLastInGroup}
+                onLongPress={handleMessageLongPress}
+                replyPreviewText={replyPreviewText}
+                isHighlighted={isHighlighted}
+            />
+        );
+    }, [currentUser, chatMessages, isGroup, handleMessageLongPress, highlightedMessageIds]);
+
+    const keyExtractor = useCallback((item: Message) => item.id, []);
 
     if (!chat) return null;
 
-    const renderMessage = ({ item, index }: { item: any; index: number }) => {
-        const isMine = item.senderId === 'me' || item.senderId === currentUser?.id;
-
-        return (
-            <Animated.View
-                entering={isMine ? FadeInRight.delay(50).duration(400) : FadeInLeft.delay(50).duration(400)}
-                layout={Layout.springify()}
-                style={[
-                    styles.messageContainer,
-                    isMine ? styles.messageContainerMine : styles.messageContainerOther,
-                ]}
-            >
-                <View style={[
-                    styles.messageBubble,
-                    isMine ? styles.messageBubbleMine : styles.messageBubbleOther
-                ]}>
-                    {item.mediaType === 'image' && (
-                        <View style={styles.mediaPlaceholder}>
-                            <LucideImage color={isMine ? theme.colors.text.inverse : theme.colors.text.primary} size={32} />
-                        </View>
-                    )}
-                    {item.text && (
-                        <Text style={[
-                            styles.messageText,
-                            isMine ? styles.messageTextMine : styles.messageTextOther
-                        ]}>
-                            {item.text}
-                        </Text>
-                    )}
-                    <View style={styles.timeContainer}>
-                        <Text style={[
-                            styles.messageTime,
-                            { color: isMine ? 'rgba(0,0,0,0.5)' : theme.colors.text.secondary }
-                        ]}>
-                            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                        {isMine && (
-                            <Text style={[
-                                styles.tick,
-                                { color: item.status === 'read' ? theme.colors.text.inverse : 'rgba(0,0,0,0.3)' }
-                            ]}>
-                                {item.status === 'read' ? '✓✓' : '✓'}
-                            </Text>
-                        )}
-                    </View>
-                </View>
-            </Animated.View>
-        );
-    };
+    const wallpaperBg = chat.wallpaper || theme.colors.background;
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            <View style={styles.header}>
-                <PressableScale style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <LucideArrowLeft color={theme.colors.text.primary} size={24} />
-                </PressableScale>
-                <View style={styles.headerInfo}>
-                    <Image source={{ uri: chat?.avatar }} style={styles.headerAvatar} />
-                    <View>
-                        <Text style={styles.headerName}>{chat?.name}</Text>
-                        <Text style={styles.headerStatus}>online</Text>
-                    </View>
-                </View>
-                <PressableScale style={styles.headerAction}>
-                    <LucideMoreVertical color={theme.colors.text.primary} size={24} />
-                </PressableScale>
-            </View>
 
-            <FlatList
-                ref={flatListRef}
-                data={chatMessages}
-                keyExtractor={item => item.id}
-                renderItem={renderMessage}
-                contentContainerStyle={styles.messageList}
-                showsVerticalScrollIndicator={false}
+            {/* Header */}
+            <ChatHeader
+                chat={chat}
+                statusText={getStatusText()}
+                onBack={handleBack}
+                onInfoPress={handleInfoPress}
+                onCallPress={handleCallPress}
+                onVideoPress={handleVideoPress}
+                onMenuPress={() => setShowHeaderMenu(true)}
             />
 
-            {showAttachments && (
-                <Animated.View
-                    entering={FadeInDown.duration(300)}
-                    exiting={FadeOutDown.duration(200)}
-                    style={styles.attachmentSheet}
-                >
-                    <View style={styles.attachmentGrid}>
-                        {[
-                            { icon: LucideFile, label: 'Document', color: '#5856D6' },
-                            { icon: LucideCamera, label: 'Camera', color: '#FF2D55' },
-                            { icon: LucideImage, label: 'Gallery', color: '#AF52DE' },
-                            { icon: LucideUser, label: 'Contact', color: '#007AFF' },
-                            { icon: LucideMapPin, label: 'Location', color: '#34C759' }
-                        ].map((item, idx) => (
-                            <PressableScale key={idx} style={styles.attachmentItem}>
-                                <View style={[styles.attachmentIcon, { backgroundColor: item.color }]}>
-                                    <item.icon color="#FFF" size={24} />
-                                </View>
-                                <Text style={styles.attachmentLabel}>{item.label}</Text>
-                            </PressableScale>
-                        ))}
-                    </View>
-                </Animated.View>
-            )}
+            {/* Search bar */}
+            <ChatSearchBar
+                visible={showSearch}
+                messages={chatMessages}
+                onClose={() => setShowSearch(false)}
+                onScrollToIndex={handleScrollToIndex}
+                onHighlightedIds={setHighlightedMessageIds}
+            />
 
+            {/* Header Menu */}
+            <ChatHeaderMenu
+                visible={showHeaderMenu}
+                isGroup={isGroup || false}
+                isMuted={chat.isMuted}
+                isBlocked={isBlocked}
+                onClose={() => setShowHeaderMenu(false)}
+                onAction={handleMenuAction}
+            />
+
+            {/* Messages */}
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                style={[styles.flex, { backgroundColor: wallpaperBg }]}
+                behavior="padding"
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
             >
-                <View style={styles.inputArea}>
-                    <PressableScale
-                        style={styles.attachButton}
-                        onPress={() => setShowAttachments(!showAttachments)}
-                    >
-                        {showAttachments ?
-                            <LucideX color={theme.colors.text.primary} size={24} /> :
-                            <LucidePlus color={theme.colors.text.secondary} size={24} />
-                        }
-                    </PressableScale>
-                    <View style={styles.textInputWrapper}>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Message"
-                            placeholderTextColor={theme.colors.text.secondary}
-                            value={text}
-                            onChangeText={setText}
-                            multiline
-                        />
-                        {!text && (
-                            <PressableScale style={styles.cameraIcon}>
-                                <LucideCamera color={theme.colors.text.secondary} size={20} />
-                            </PressableScale>
-                        )}
+                <FlatList
+                    ref={flatListRef}
+                    data={chatMessages}
+                    keyExtractor={keyExtractor}
+                    renderItem={renderMessage}
+                    contentContainerStyle={styles.messageList}
+                    showsVerticalScrollIndicator={false}
+                    initialNumToRender={15}
+                    maxToRenderPerBatch={10}
+                    windowSize={11}
+                    removeClippedSubviews={Platform.OS === 'android'}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="interactive"
+                    ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+                    onScrollBeginDrag={() => {
+                        if (showAttachments) setShowAttachments(false);
+                        if (showEmoji) setShowEmoji(false);
+                    }}
+                    onScrollToIndexFailed={(info) => {
+                        setTimeout(() => {
+                            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+                        }, 200);
+                    }}
+                />
+
+                {/* Reply preview bar */}
+                {replyingTo && (
+                    <View style={styles.replyBar}>
+                        <View style={styles.replyBarContent}>
+                            <View style={styles.replyBarAccent} />
+                            <View style={styles.replyBarText}>
+                                <Text style={styles.replyBarLabel}>
+                                    Replying to {replyingTo.senderId === (currentUser?.id || 'me') ? 'yourself' : 'message'}
+                                </Text>
+                                <Text style={styles.replyBarMessage} numberOfLines={1}>
+                                    {replyingTo.text || 'Media'}
+                                </Text>
+                            </View>
+                        </View>
+                        <Text
+                            style={styles.replyBarClose}
+                            onPress={() => setReplyingTo(null)}
+                        >✕</Text>
                     </View>
-                    {text.trim() ? (
-                        <PressableScale style={styles.sendButton} onPress={handleSend}>
-                            <LucideSend color={theme.colors.text.inverse} size={20} />
-                        </PressableScale>
-                    ) : (
-                        <PressableScale style={styles.micButton}>
-                            <LucideMic color={theme.colors.text.primary} size={24} />
-                        </PressableScale>
-                    )}
-                </View>
+                )}
+
+                {/* Blocked indicator */}
+                {isBlocked && (
+                    <View style={styles.blockedBar}>
+                        <Text style={styles.blockedText}>
+                            You have blocked this contact. Unblock to send messages.
+                        </Text>
+                    </View>
+                )}
+
+                {/* Attachment Panel */}
+                <AttachmentPanel
+                    visible={showAttachments}
+                    onClose={() => setShowAttachments(false)}
+                    onSelect={handleAttachmentSelect}
+                />
+
+                {/* Emoji Picker */}
+                <EmojiPicker
+                    visible={showEmoji}
+                    onSelect={handleEmojiSelect}
+                    onClose={() => setShowEmoji(false)}
+                />
+
+                {/* Voice Recorder (replaces input bar while recording) */}
+                {isRecording ? (
+                    <VoiceRecorder
+                        visible={isRecording}
+                        onCancel={() => setIsRecording(false)}
+                        onSend={handleVoiceSend}
+                    />
+                ) : (
+                    /* Input Bar */
+                    <ChatInputBar
+                        text={text}
+                        onChangeText={(t) => {
+                            setText(t);
+                            if (showEmoji && t.length > text.length) {
+                                // Don't auto-close emoji on emoji-inserted text
+                            }
+                        }}
+                        onSend={handleSendText}
+                        onAttachPress={() => {
+                            Keyboard.dismiss();
+                            setShowEmoji(false);
+                            setShowAttachments(!showAttachments);
+                        }}
+                        onEmojiPress={handleEmojiPress}
+                        onCameraPress={handleCameraPress}
+                        onMicPress={handleMicPress}
+                        showAttachments={showAttachments}
+                        bottomInset={insets.bottom}
+                        disabled={isBlocked}
+                    />
+                )}
             </KeyboardAvoidingView>
+
+            {/* Long Press Menu */}
+            <MessageLongPressMenu
+                visible={!!longPressMessage}
+                onClose={() => setLongPressMessage(null)}
+                onAction={handleLongPressAction}
+                isMine={longPressMessage?.senderId === 'me' || longPressMessage?.senderId === currentUser?.id || false}
+            />
+
+            {/* Wallpaper Picker */}
+            <WallpaperPicker
+                visible={showWallpaper}
+                currentWallpaper={chat.wallpaper}
+                onSelect={handleWallpaperSelect}
+                onClose={() => setShowWallpaper(false)}
+            />
         </View>
     );
 };
@@ -240,189 +594,66 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: theme.colors.background,
     },
-    header: {
-        marginTop: 54,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerInfo: {
+    flex: {
         flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginLeft: 12,
-    },
-    headerAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        marginRight: 12,
-    },
-    headerName: {
-        color: theme.colors.text.primary,
-        fontSize: 17,
-        fontWeight: '600',
-    },
-    headerStatus: {
-        color: '#34C759',
-        fontSize: 12,
-    },
-    headerAction: {
-        padding: 4,
     },
     messageList: {
-        paddingHorizontal: 16,
-        paddingBottom: 20,
-    },
-    messageContainer: {
-        marginBottom: 8,
-        maxWidth: '85%',
-    },
-    messageContainerMine: {
-        alignSelf: 'flex-end',
-    },
-    messageContainerOther: {
-        alignSelf: 'flex-start',
-    },
-    messageBubble: {
-        padding: 12,
-        paddingHorizontal: 16,
-        borderRadius: 22,
+        paddingTop: 12,
         paddingBottom: 8,
     },
-    messageBubbleMine: {
-        backgroundColor: theme.colors.accent,
-        borderBottomRightRadius: 4,
-    },
-    messageBubbleOther: {
-        backgroundColor: theme.colors.surface,
-        borderBottomLeftRadius: 4,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-    },
-    messageText: {
-        fontSize: 16,
-        lineHeight: 22,
-    },
-    messageTextMine: {
-        color: theme.colors.text.inverse,
-    },
-    messageTextOther: {
-        color: theme.colors.text.primary,
-    },
-    timeContainer: {
+    replyBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'flex-end',
-        marginTop: 4,
+        backgroundColor: '#1C1C1E',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,255,255,0.06)',
     },
-    messageTime: {
-        fontSize: 10,
-    },
-    tick: {
-        fontSize: 10,
-        marginLeft: 4,
-    },
-    inputArea: {
-        padding: 12,
-        paddingBottom: 32,
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        borderTopWidth: 1,
-        borderTopColor: theme.colors.border,
-    },
-    attachButton: {
-        width: 44,
-        height: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 4,
-    },
-    textInputWrapper: {
+    replyBarContent: {
         flex: 1,
-        backgroundColor: theme.colors.surface,
-        borderRadius: 22,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    replyBarAccent: {
+        width: 3,
+        height: 32,
+        backgroundColor: '#5AC8FA',
+        borderRadius: 2,
+        marginRight: 10,
+    },
+    replyBarText: {
+        flex: 1,
+    },
+    replyBarLabel: {
+        color: '#5AC8FA',
+        fontSize: 12,
+        fontWeight: '600',
+        marginBottom: 2,
+    },
+    replyBarMessage: {
+        color: theme.colors.text.secondary,
+        fontSize: 14,
+    },
+    replyBarClose: {
+        color: theme.colors.text.secondary,
+        fontSize: 18,
+        paddingLeft: 12,
+        padding: 4,
+    },
+    blockedBar: {
+        backgroundColor: 'rgba(255,59,48,0.1)',
         paddingHorizontal: 16,
         paddingVertical: 10,
-        maxHeight: 120,
-        flexDirection: 'row',
-        alignItems: 'center',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(255,59,48,0.2)',
     },
-    input: {
-        flex: 1,
-        color: theme.colors.text.primary,
-        fontSize: 16,
-        padding: 0,
-    },
-    cameraIcon: {
-        padding: 4,
-        marginLeft: 8,
-    },
-    sendButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: theme.colors.accent,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 8,
-    },
-    micButton: {
-        width: 44,
-        height: 44,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 4,
-    },
-    attachmentSheet: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
-        padding: 24,
-        paddingBottom: 40,
-        position: 'absolute',
-        bottom: 100,
-        width: '100%',
-        zIndex: 100,
-    },
-    attachmentGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-    },
-    attachmentItem: {
-        width: '30%',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    attachmentIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    attachmentLabel: {
-        color: theme.colors.text.secondary,
-        fontSize: 12,
+    blockedText: {
+        color: theme.colors.error,
+        fontSize: 13,
+        textAlign: 'center',
         fontWeight: '500',
     },
-    mediaPlaceholder: {
-        width: 200,
-        height: 150,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 8,
-    }
 });
 
 export default ChatScreen;

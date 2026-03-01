@@ -38,6 +38,7 @@ import Animated, {
 import { useDispatch, useSelector } from 'react-redux';
 import GuftaguLogo from '../../../assets/images/favicon.svg';
 import PressableScale from '../../components/PressableScale';
+import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
 import {
     clearChat,
     deleteChats,
@@ -51,7 +52,7 @@ import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Chat } from '../../types';
 import ChatContextMenu from './ChatContextMenu';
-import ContactListModal from './ContactListModal';
+
 
 /* ─── Filters ──────────────────────────────────────────────────────────────── */
 type FilterType = 'all' | 'unread' | 'groups';
@@ -93,7 +94,7 @@ const ChatListScreen = ({ navigation }: any) => {
     const [headerMenuVisible, setHeaderMenuVisible] = useState(false);
     const [contextMenuVisible, setContextMenuVisible] = useState(false);
     const [contextChatId, setContextChatId] = useState<string | null>(null);
-    const [contactModalVisible, setContactModalVisible] = useState(false);
+
 
     const isSelectionMode = selectedIds.size > 0;
 
@@ -196,7 +197,9 @@ const ChatListScreen = ({ navigation }: any) => {
             case 'Settings':
                 navigation.navigate('Settings');
                 break;
-            // New Group and Linked Devices — stub for now
+            case 'Linked Devices':
+                navigation.navigate('LinkedDevices');
+                break;
         }
     }, [dispatch, navigation]);
 
@@ -414,12 +417,13 @@ const ChatListScreen = ({ navigation }: any) => {
 
             {/* ── FAB ──────────────────────────────────────────────────── */}
             {!isSelectionMode && (
-                <Animated.View entering={FadeInRight.duration(400).delay(200)}>
+                <Animated.View entering={FadeInRight.duration(400).delay(200)} style={styles.fabWrapper}>
                     <PressableScale
-                        style={styles.fab}
+                        style={styles.fabInner}
                         onPress={() => {
+                            console.log('[FAB] New Chat pressed — navigating to ContactList');
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            setContactModalVisible(true);
+                            navigation.navigate('ContactList');
                         }}
                         scaleTo={0.9}
                     >
@@ -490,19 +494,7 @@ const ChatListScreen = ({ navigation }: any) => {
                 }}
             />
 
-            {/* ── Contact Modal ────────────────────────────────────────── */}
-            <ContactListModal
-                visible={contactModalVisible}
-                onClose={() => setContactModalVisible(false)}
-                onMessage={(contact) => {
-                    setContactModalVisible(false);
-                    // Navigate to a chat with that contact
-                }}
-                onInvite={() => {
-                    setContactModalVisible(false);
-                    // Share invite link stub
-                }}
-            />
+
         </View>
     );
 };
@@ -630,7 +622,7 @@ const styles = StyleSheet.create({
     /* ── Chat List ──────────────────────────────────────────────────────── */
     listContainer: {
         paddingHorizontal: 12,
-        paddingBottom: 100,
+        paddingBottom: TAB_BAR_HEIGHT + 16,
     },
     listEmpty: {
         flex: 1,
@@ -773,10 +765,15 @@ const styles = StyleSheet.create({
     },
 
     /* ── FAB ────────────────────────────────────────────────────────────── */
-    fab: {
+    fabWrapper: {
         position: 'absolute',
         bottom: Platform.OS === 'ios' ? 100 : 84,
         right: 20,
+        width: 58,
+        height: 58,
+        elevation: 10,
+    },
+    fabInner: {
         width: 58,
         height: 58,
         borderRadius: 29,
@@ -787,7 +784,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 12,
-        elevation: 10,
     },
 
     /* ── Dropdown Menu ──────────────────────────────────────────────────── */

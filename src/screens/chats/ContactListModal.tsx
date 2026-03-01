@@ -1,8 +1,11 @@
 import { BlurView } from 'expo-blur';
+import * as Contacts from 'expo-contacts';
 import * as Haptics from 'expo-haptics';
-import { Search, X } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import * as SMS from 'expo-sms';
+import { AlertCircle, Search, UserX, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    ActivityIndicator,
     FlatList,
     Image,
     Modal,
@@ -13,29 +16,35 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, SlideInDown } from 'react-native-reanimated';
+import { useDispatch, useSelector } from 'react-redux';
+import { setActiveChat } from '../../store/slices/chatSlice';
+import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
-import { Contact } from '../../types';
 
-const DUMMY_CONTACTS: Contact[] = [
-    { id: 'c1', name: 'Alice', avatar: 'https://i.pravatar.cc/150?u=2', phone: '+1 234 567 8901', isGuftaguUser: true },
-    { id: 'c2', name: 'Bob', avatar: 'https://i.pravatar.cc/150?u=3', phone: '+1 234 567 8902', isGuftaguUser: true },
-    { id: 'c3', name: 'Charlie', avatar: 'https://i.pravatar.cc/150?u=4', phone: '+1 234 567 8903', isGuftaguUser: false },
-    { id: 'c4', name: 'David', avatar: 'https://i.pravatar.cc/150?u=7', phone: '+1 234 567 8904', isGuftaguUser: true },
-    { id: 'c5', name: 'Emma', avatar: 'https://i.pravatar.cc/150?u=8', phone: '+1 234 567 8905', isGuftaguUser: true },
-    { id: 'c6', name: 'Frank', avatar: 'https://i.pravatar.cc/150?u=20', phone: '+1 234 567 8906', isGuftaguUser: false },
-    { id: 'c7', name: 'Grace', avatar: 'https://i.pravatar.cc/150?u=21', phone: '+1 234 567 8907', isGuftaguUser: true },
-    { id: 'c8', name: 'Hannah', avatar: 'https://i.pravatar.cc/150?u=22', phone: '+1 234 567 8908', isGuftaguUser: false },
-    { id: 'c9', name: 'James', avatar: 'https://i.pravatar.cc/150?u=14', phone: '+1 234 567 8909', isGuftaguUser: true },
-    { id: 'c10', name: 'Sophia', avatar: 'https://i.pravatar.cc/150?u=13', phone: '+1 234 567 8910', isGuftaguUser: true },
-];
+// Simulated Guftagu phone numbers (matched from Redux chats)
+const GUFTAGU_PHONES = new Set([
+    '+1 234 567 8901', '+1 234 567 8902', '+1 234 567 8904',
+    '+1 234 567 8905', '+1 234 567 8907', '+1 234 567 8909',
+    '+1 234 567 8910',
+]);
+
+interface DeviceContact {
+    id: string;
+    name: string;
+    phone: string;
+    avatar?: string;
+    isGuftaguUser: boolean;
+}
 
 interface ContactListModalProps {
     visible: boolean;
     onClose: () => void;
-    onMessage: (contact: Contact) => void;
-    onInvite: (contact: Contact) => void;
+    onMessage: (contact: DeviceContact) => void;
+    onInvite: (contact: DeviceContact) => void;
 }
+
+const INVITE_MESSAGE = '🎉 Hey! I\'m using Guftagu — a premium chat app. Join me! Download: https://guftagu.app/download';
 
 const ContactListModal: React.FC<ContactListModalProps> = ({
     visible,
@@ -44,46 +53,200 @@ const ContactListModal: React.FC<ContactListModalProps> = ({
     onInvite,
 }) => {
     const [search, setSearch] = useState('');
+    const [contacts, setContacts] = useState<DeviceContact[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [permissionDenied, setPermissionDenied] = useState(false);
+    const dispatch = useDispatch();
+    const { chats } = useSelector((state: RootState) => state.chat);
+
+    // Load contacts when modal opens
+    useEffect(() => {
+        if (visible) {
+            loadContacts();
+        } else {
+            setSearch('');
+        }
+    }, [visible]);
+
+    const loadContacts = async () => {
+        setLoading(true);
+        setPermissionDenied(false);
+
+        try {
+            const { status } = await Contacts.requestPermissionsAsync();
+            if (status !== 'granted') {
+                setPermissionDenied(true);
+                setLoading(false);
+                return;
+            }
+
+            const { data } = await Contacts.getContactsAsync({
+                fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Image],
+                sort: Contacts.SortTypes.FirstName,
+            });
+
+            const mapped: DeviceContact[] = data
+                .filter(c => c.phoneNumbers && c.phoneNumbers.length > 0 && c.name)
+                .map(c => {
+                    const phone = c.phoneNumbers?.[0]?.number || '';
+                    const cleanPhone = phone.replace(/[^+\d\s]/g, '').trim();
+                    return {
+                        id: c.id || String(Math.random()),
+                        name: c.name || 'Unknown',
+                        phone: cleanPhone,
+                        avatar: c.image?.uri,
+                        isGuftaguUser: GUFTAGU_PHONES.has(cleanPhone),
+                    };
+                });
+
+            // Sort: Guftagu users first
+            mapped.sort((a, b) => {
+                if (a.isGuftaguUser && !b.isGuftaguUser) return -1;
+                if (!a.isGuftaguUser && b.isGuftaguUser) return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+            setContacts(mapped);
+        } catch {
+            // Fallback: show empty with no crash
+            setContacts([]);
+        }
+
+        setLoading(false);
+    };
 
     const filtered = useMemo(() => {
-        if (!search.trim()) return DUMMY_CONTACTS;
+        if (!search.trim()) return contacts;
         const q = search.toLowerCase();
-        return DUMMY_CONTACTS.filter(c => c.name.toLowerCase().includes(q));
-    }, [search]);
+        return contacts.filter(c =>
+            c.name.toLowerCase().includes(q) ||
+            c.phone.includes(q)
+        );
+    }, [search, contacts]);
 
-    const renderContact = ({ item }: { item: Contact }) => (
-        <View style={styles.contactRow}>
-            <Image source={{ uri: item.avatar }} style={styles.contactAvatar} />
-            <View style={styles.contactInfo}>
-                <Text style={styles.contactName}>{item.name}</Text>
-                <Text style={styles.contactPhone}>{item.phone}</Text>
-            </View>
-            <Pressable
-                style={({ pressed }) => [
-                    styles.contactAction,
-                    item.isGuftaguUser ? styles.messageBtn : styles.inviteBtn,
-                    pressed && { opacity: 0.7 },
-                ]}
-                onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    if (item.isGuftaguUser) {
-                        onMessage(item);
-                    } else {
-                        onInvite(item);
-                    }
-                }}
-            >
-                <Text
-                    style={[
-                        styles.contactActionText,
-                        item.isGuftaguUser ? styles.messageBtnText : styles.inviteBtnText,
+    const handleInvite = useCallback(async (contact: DeviceContact) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const isAvailable = await SMS.isAvailableAsync();
+        if (isAvailable && contact.phone) {
+            await SMS.sendSMSAsync([contact.phone], INVITE_MESSAGE);
+        }
+        onInvite(contact);
+    }, [onInvite]);
+
+    const handleMessage = useCallback((contact: DeviceContact) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // Find matching chat by name
+        const matchingChat = chats.find(c =>
+            c.name?.toLowerCase() === contact.name.toLowerCase()
+        );
+        if (matchingChat) {
+            dispatch(setActiveChat(matchingChat.id));
+        }
+        onMessage(contact);
+    }, [chats, dispatch, onMessage]);
+
+    const renderContact = useCallback(({ item, index }: { item: DeviceContact; index: number }) => (
+        <Animated.View entering={FadeInDown.delay(index * 30).duration(250)}>
+            <View style={styles.contactRow}>
+                {item.avatar ? (
+                    <Image source={{ uri: item.avatar }} style={styles.contactAvatar} />
+                ) : (
+                    <View style={[styles.contactAvatar, styles.avatarPlaceholder]}>
+                        <Text style={styles.avatarInitial}>
+                            {item.name.charAt(0).toUpperCase()}
+                        </Text>
+                    </View>
+                )}
+                <View style={styles.contactInfo}>
+                    <Text style={styles.contactName}>{item.name}</Text>
+                    <Text style={styles.contactPhone}>{item.phone}</Text>
+                    {item.isGuftaguUser && (
+                        <View style={styles.guftaguBadge}>
+                            <Text style={styles.guftaguBadgeText}>on Guftagu</Text>
+                        </View>
+                    )}
+                </View>
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.contactAction,
+                        item.isGuftaguUser ? styles.messageBtn : styles.inviteBtn,
+                        pressed && { opacity: 0.7 },
                     ]}
+                    onPress={() => {
+                        if (item.isGuftaguUser) {
+                            handleMessage(item);
+                        } else {
+                            handleInvite(item);
+                        }
+                    }}
                 >
-                    {item.isGuftaguUser ? 'Message' : 'Invite'}
-                </Text>
-            </Pressable>
-        </View>
-    );
+                    <Text
+                        style={[
+                            styles.contactActionText,
+                            item.isGuftaguUser ? styles.messageBtnText : styles.inviteBtnText,
+                        ]}
+                    >
+                        {item.isGuftaguUser ? 'Message' : 'Invite'}
+                    </Text>
+                </Pressable>
+            </View>
+        </Animated.View>
+    ), [handleMessage, handleInvite]);
+
+    const renderContent = () => {
+        if (loading) {
+            return (
+                <View style={styles.centerState}>
+                    <ActivityIndicator size="large" color="rgba(255,255,255,0.4)" />
+                    <Text style={styles.stateText}>Loading contacts...</Text>
+                </View>
+            );
+        }
+
+        if (permissionDenied) {
+            return (
+                <View style={styles.centerState}>
+                    <AlertCircle color="rgba(255,255,255,0.2)" size={48} />
+                    <Text style={styles.stateTitle}>Permission Required</Text>
+                    <Text style={styles.stateText}>
+                        Allow access to your contacts to start new conversations.
+                    </Text>
+                    <Pressable
+                        style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
+                        onPress={loadContacts}
+                    >
+                        <Text style={styles.retryBtnText}>Try Again</Text>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        return (
+            <FlatList
+                data={filtered}
+                keyExtractor={item => item.id}
+                renderItem={renderContact}
+                contentContainerStyle={styles.contactList}
+                showsVerticalScrollIndicator={false}
+                initialNumToRender={15}
+                maxToRenderPerBatch={10}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                    <Animated.View entering={FadeIn} style={styles.centerState}>
+                        <UserX color="rgba(255,255,255,0.15)" size={44} />
+                        <Text style={styles.stateTitle}>
+                            {search ? 'No matches' : 'No contacts'}
+                        </Text>
+                        <Text style={styles.stateText}>
+                            {search
+                                ? `No contacts matching "${search}"`
+                                : 'Your contact list appears to be empty'}
+                        </Text>
+                    </Animated.View>
+                }
+            />
+        );
+    };
 
     return (
         <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
@@ -108,31 +271,27 @@ const ContactListModal: React.FC<ContactListModalProps> = ({
                             </View>
 
                             {/* Search */}
-                            <View style={styles.searchRow}>
-                                <Search color="rgba(255,255,255,0.3)" size={16} />
-                                <TextInput
-                                    style={styles.searchInput}
-                                    placeholder="Search contacts..."
-                                    placeholderTextColor="rgba(255,255,255,0.25)"
-                                    value={search}
-                                    onChangeText={setSearch}
-                                    selectionColor="rgba(255,255,255,0.5)"
-                                />
-                            </View>
+                            {!loading && !permissionDenied && (
+                                <View style={styles.searchRow}>
+                                    <Search color="rgba(255,255,255,0.3)" size={16} />
+                                    <TextInput
+                                        style={styles.searchInput}
+                                        placeholder="Search contacts..."
+                                        placeholderTextColor="rgba(255,255,255,0.25)"
+                                        value={search}
+                                        onChangeText={setSearch}
+                                        selectionColor="rgba(255,255,255,0.5)"
+                                    />
+                                    {search.length > 0 && (
+                                        <Pressable onPress={() => setSearch('')} hitSlop={6}>
+                                            <X color="rgba(255,255,255,0.3)" size={16} />
+                                        </Pressable>
+                                    )}
+                                </View>
+                            )}
 
-                            {/* List */}
-                            <FlatList
-                                data={filtered}
-                                keyExtractor={item => item.id}
-                                renderItem={renderContact}
-                                contentContainerStyle={styles.contactList}
-                                showsVerticalScrollIndicator={false}
-                                ListEmptyComponent={
-                                    <Animated.View entering={FadeIn} style={styles.emptyState}>
-                                        <Text style={styles.emptyText}>No contacts found</Text>
-                                    </Animated.View>
-                                }
-                            />
+                            {/* Content */}
+                            {renderContent()}
                         </View>
                     </BlurView>
                 </Animated.View>
@@ -161,6 +320,7 @@ const styles = StyleSheet.create({
     sheetInner: {
         backgroundColor: 'rgba(20,20,20,0.85)',
         paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+        minHeight: 300,
     },
     handleRow: {
         alignItems: 'center',
@@ -213,6 +373,7 @@ const styles = StyleSheet.create({
     },
     contactList: {
         paddingHorizontal: 20,
+        paddingBottom: 16,
     },
     contactRow: {
         flexDirection: 'row',
@@ -227,6 +388,16 @@ const styles = StyleSheet.create({
         borderRadius: 22,
         backgroundColor: theme.colors.surface,
     },
+    avatarPlaceholder: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    avatarInitial: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 18,
+        fontWeight: '700',
+    },
     contactInfo: {
         flex: 1,
         marginLeft: 14,
@@ -240,6 +411,19 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.4)',
         fontSize: 12,
         marginTop: 2,
+    },
+    guftaguBadge: {
+        backgroundColor: 'rgba(52,199,89,0.12)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+        marginTop: 3,
+    },
+    guftaguBadgeText: {
+        color: '#34C759',
+        fontSize: 10,
+        fontWeight: '600',
     },
     contactAction: {
         paddingHorizontal: 16,
@@ -264,13 +448,36 @@ const styles = StyleSheet.create({
     inviteBtnText: {
         color: 'rgba(255,255,255,0.7)',
     },
-    emptyState: {
-        paddingVertical: 40,
+    // States
+    centerState: {
         alignItems: 'center',
+        paddingVertical: 48,
+        paddingHorizontal: 32,
     },
-    emptyText: {
-        color: 'rgba(255,255,255,0.3)',
+    stateTitle: {
+        color: 'rgba(255,255,255,0.35)',
+        fontSize: 17,
+        fontWeight: '600',
+        marginTop: 16,
+    },
+    stateText: {
+        color: 'rgba(255,255,255,0.2)',
+        fontSize: 13,
+        textAlign: 'center',
+        marginTop: 6,
+        lineHeight: 18,
+    },
+    retryBtn: {
+        marginTop: 20,
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: '#FFFFFF',
+    },
+    retryBtnText: {
+        color: '#000',
         fontSize: 14,
+        fontWeight: '600',
     },
 });
 

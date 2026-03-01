@@ -17,6 +17,18 @@ export interface Message {
     timestamp: string;
     status: 'sending' | 'sent' | 'delivered' | 'read';
     replyTo?: string;
+    isStarred?: boolean;
+    // Document fields
+    fileName?: string;
+    fileSize?: string;
+    // Location fields
+    latitude?: number;
+    longitude?: number;
+    // Contact card fields
+    contactName?: string;
+    contactPhone?: string;
+    // Voice message
+    voiceDuration?: number;
 }
 
 export interface Chat {
@@ -32,6 +44,8 @@ export interface Chat {
     isMuted?: boolean;
     isGroup?: boolean;
     groupMembers?: string[];
+    isBlocked?: boolean;
+    wallpaper?: string;
 }
 
 export interface Contact {
@@ -54,10 +68,14 @@ export interface Call {
 export interface Story {
     id: string;
     userId: string;
-    mediaUri: string;
-    mediaType: 'image' | 'video';
+    mediaUri?: string; // Optional for text-only
+    mediaType: 'image' | 'video' | 'text';
+    text?: string;
+    backgroundColor?: string;
+    caption?: string;
     timestamp: string;
     isViewed: boolean;
+    viewers?: { userId: string, timestamp: string }[];
 }
 
 export interface AuthState {
