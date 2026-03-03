@@ -1,19 +1,71 @@
-import { LucideArrowLeft } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import {
+    LucideArrowLeft,
+    LucideChevronRight,
+    LucideCircle,
+    LucideMusic,
+    LucideSmartphone,
+    LucideVibrate
+} from 'lucide-react-native';
+import React from 'react';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateNotifications } from '../../store/slices/settingsSlice';
+import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 
 const NotificationsScreen = ({ navigation }: any) => {
-    const [conversationTones, setConversationTones] = useState(true);
-    const [highPriority, setHighPriority] = useState(true);
-    const [reactionNotifications, setReactionNotifications] = useState(true);
+    const dispatch = useDispatch();
+    const notifications = useSelector((state: RootState) => state.settings.notifications);
+
+    const updatePref = (key: string, value: any) => {
+        dispatch(updateNotifications({ [key]: value }));
+    };
+
+    const selectTone = (type: 'messages' | 'groups' | 'calls') => {
+        const tones = ['Default (Aurora)', 'Crystal', 'Chimes', 'Waves', 'Pulse'];
+        Alert.alert(
+            `Select ${type === 'calls' ? 'Ringtone' : 'Notification Tone'}`,
+            'Choose a sound for your notifications.',
+            tones.map(tone => ({
+                text: tone,
+                onPress: () => updatePref(type === 'calls' ? 'callTone' : `${type}Tone`, tone)
+            })),
+            { cancelable: true }
+        );
+    };
+
+    const selectVibrate = (type: 'messages' | 'groups' | 'calls') => {
+        const options = ['Off', 'Default', 'Short', 'Long'];
+        Alert.alert(
+            'Vibration',
+            'Choose vibration length.',
+            options.map(opt => ({
+                text: opt,
+                onPress: () => updatePref(`${type}Vibrate`, opt)
+            })),
+            { cancelable: true }
+        );
+    };
+
+    const selectLight = (type: 'messages' | 'groups') => {
+        const colors = ['None', 'White', 'Red', 'Yellow', 'Green', 'Cyan', 'Blue', 'Purple'];
+        Alert.alert(
+            'Light Color',
+            'Choose LED notification color (if supported).',
+            colors.map(color => ({
+                text: color,
+                onPress: () => updatePref(`${type}Light`, color)
+            })),
+            { cancelable: true }
+        );
+    };
 
     const renderToggleItem = (title: string, subtitle: string, value: boolean, onValueChange: (val: boolean) => void) => (
         <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
                 <Text style={styles.settingTitle}>{title}</Text>
-                <Text style={[styles.settingValue, { marginTop: 4 }]}>{subtitle}</Text>
+                <Text style={styles.settingSubtitle}>{subtitle}</Text>
             </View>
             <Switch
                 value={value}
@@ -24,51 +76,71 @@ const NotificationsScreen = ({ navigation }: any) => {
         </View>
     );
 
-    const renderSettingItemAction = (title: string, value: string) => (
-        <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-                <Text style={styles.settingTitle}>{title}</Text>
-                <Text style={[styles.settingValue, { marginTop: 4 }]}>{value}</Text>
-            </View>
-        </TouchableOpacity>
-    );
+    const renderActionItem = (icon: any, title: string, value: string, onPress: () => void) => {
+        const Icon = icon;
+        return (
+            <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+                <View style={[styles.iconContainer, { width: 30 }]}>
+                    <Icon color={theme.colors.text.secondary} size={20} />
+                </View>
+                <View style={styles.settingInfo}>
+                    <Text style={styles.settingTitle}>{title}</Text>
+                    <Text style={styles.settingSubtitle}>{value}</Text>
+                </View>
+                <LucideChevronRight color={theme.colors.text.tertiary} size={20} />
+            </TouchableOpacity>
+        );
+    };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <LucideArrowLeft color={theme.colors.text.primary} size={24} />
+                    <LucideArrowLeft color={theme.colors.text.primary} size={28} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Notifications</Text>
             </View>
 
             <ScrollView style={styles.content}>
                 <View style={styles.section}>
-                    {renderToggleItem('Conversation tones', 'Play sounds for incoming and outgoing messages.', conversationTones, setConversationTones)}
+                    <Text style={styles.sectionHeader}>General</Text>
+                    {renderToggleItem('Conversation tones', 'Play sounds for incoming and outgoing messages.', notifications.conversationTones, (v) => updatePref('conversationTones', v))}
                 </View>
 
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Messages</Text>
-                    {renderSettingItemAction('Notification tone', 'Default (Aurora)')}
-                    {renderSettingItemAction('Vibrate', 'Default')}
-                    {renderSettingItemAction('Light', 'White')}
-                    {renderToggleItem('Use high priority notifications', 'Show previews of notifications at the top of the screen', highPriority, setHighPriority)}
-                    {renderToggleItem('Reaction Notifications', 'Show notifications for reactions to messages you send', reactionNotifications, setReactionNotifications)}
-                </View>
+                <View style={styles.sectionDivider} />
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Groups</Text>
-                    {renderSettingItemAction('Notification tone', 'Default (Aurora)')}
-                    {renderSettingItemAction('Vibrate', 'Default')}
-                    {renderSettingItemAction('Light', 'White')}
-                    {renderToggleItem('Use high priority notifications', 'Show previews of notifications at the top of the screen', highPriority, () => { })}
-                    {renderToggleItem('Reaction Notifications', 'Show notifications for reactions to messages you send', reactionNotifications, () => { })}
+                    <Text style={styles.sectionHeader}>Messages</Text>
+                    {renderActionItem(LucideMusic, 'Notification tone', notifications.messagesTone, () => selectTone('messages'))}
+                    {renderActionItem(LucideVibrate, 'Vibrate', notifications.messagesVibrate, () => selectVibrate('messages'))}
+                    {renderActionItem(LucideCircle, 'Light', notifications.messagesLight, () => selectLight('messages'))}
+                    {renderToggleItem('High priority notifications', 'Show previews of notifications at the top of the screen', notifications.messagesHighPriority, (v) => updatePref('messagesHighPriority', v))}
+                    {renderToggleItem('Reaction notifications', 'Show notifications for reactions to messages you send', notifications.messagesReactions, (v) => updatePref('messagesReactions', v))}
                 </View>
 
+                <View style={styles.sectionDivider} />
+
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Calls</Text>
-                    {renderSettingItemAction('Ringtone', 'Default')}
-                    {renderSettingItemAction('Vibrate', 'Default')}
+                    <Text style={styles.sectionHeader}>Groups</Text>
+                    {renderActionItem(LucideMusic, 'Notification tone', notifications.groupsTone, () => selectTone('groups'))}
+                    {renderActionItem(LucideVibrate, 'Vibrate', notifications.groupsVibrate, () => selectVibrate('groups'))}
+                    {renderActionItem(LucideCircle, 'Light', notifications.groupsLight, () => selectLight('groups'))}
+                    {renderToggleItem('High priority notifications', 'Show previews of notifications at the top of the screen', notifications.groupsHighPriority, (v) => updatePref('groupsHighPriority', v))}
+                    {renderToggleItem('Reaction notifications', 'Show notifications for reactions to messages you send', notifications.groupsReactions, (v) => updatePref('groupsReactions', v))}
+                </View>
+
+                <View style={styles.sectionDivider} />
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionHeader}>Calls</Text>
+                    {renderActionItem(LucideSmartphone, 'Ringtone', notifications.callTone, () => selectTone('calls'))}
+                    {renderActionItem(LucideVibrate, 'Vibrate', notifications.callVibrate, () => selectVibrate('calls'))}
+                </View>
+
+                <View style={styles.footer}>
+                    <TouchableOpacity onPress={() => Alert.alert('Reset', 'Notification settings reset to default.')}>
+                        <Text style={styles.footerText}>Reset notification settings</Text>
+                    </TouchableOpacity>
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -87,57 +159,65 @@ const styles = StyleSheet.create({
         paddingVertical: theme.spacing.lg,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.border,
-        marginTop: 20,
     },
     backButton: {
-        padding: theme.spacing.xs,
         marginRight: theme.spacing.md,
     },
     headerTitle: {
         color: theme.colors.text.primary,
         fontSize: theme.typography.sizes.xl,
-        fontWeight: theme.typography.weights.bold as any,
+        fontWeight: 'bold',
     },
     content: {
         flex: 1,
     },
     section: {
-        marginTop: theme.spacing.lg,
-        borderTopWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: theme.colors.secondary,
+        backgroundColor: theme.colors.background,
     },
-    sectionTitle: {
-        color: theme.colors.accent,
+    sectionHeader: {
+        color: theme.colors.text.secondary,
         fontSize: theme.typography.sizes.sm,
-        fontWeight: theme.typography.weights.semibold as any,
-        paddingHorizontal: theme.spacing.lg,
-        paddingTop: theme.spacing.md,
-        paddingBottom: theme.spacing.sm,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+    },
+    sectionDivider: {
+        height: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: theme.spacing.md,
-        paddingHorizontal: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+    },
+    iconContainer: {
+        alignItems: 'center',
+        marginRight: 12,
     },
     settingInfo: {
         flex: 1,
-        paddingRight: theme.spacing.md,
     },
     settingTitle: {
         color: theme.colors.text.primary,
         fontSize: theme.typography.sizes.md,
     },
-    settingValue: {
+    settingSubtitle: {
         color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
+        fontSize: theme.typography.sizes.xs,
         marginTop: 2,
     },
+    footer: {
+        padding: 40,
+        alignItems: 'center',
+    },
+    footerText: {
+        color: theme.colors.error,
+        fontWeight: 'bold',
+        fontSize: 14,
+    }
 });
 
 export default NotificationsScreen;

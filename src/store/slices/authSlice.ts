@@ -43,6 +43,11 @@ const authSlice = createSlice({
         setProfileCompleted: (state, action: PayloadAction<boolean>) => {
             state.profileCompleted = action.payload;
         },
+        updateProfile: (state, action: PayloadAction<Partial<User>>) => {
+            if (state.user) {
+                state.user = { ...state.user, ...action.payload };
+            }
+        },
     },
 });
 
@@ -53,6 +58,7 @@ export const {
     logout,
     setPhoneNumber,
     setOtpVerified,
-    setProfileCompleted
+    setProfileCompleted,
+    updateProfile
 } = authSlice.actions;
 export default authSlice.reducer;

@@ -5,6 +5,9 @@ export interface User {
     status?: string;
     phoneNumber?: string;
     lastSeen?: string;
+    about?: string;
+    notes?: string;
+    email?: string;
 }
 
 export interface Message {

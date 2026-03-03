@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice';
 import callReducer from './slices/callSlice';
 import chatReducer from './slices/chatSlice';
 import deviceReducer from './slices/deviceSlice';
+import settingsReducer from './slices/settingsSlice';
 import statusReducer from './slices/statusSlice';
 
 export const store = configureStore({
@@ -12,6 +13,7 @@ export const store = configureStore({
         status: statusReducer,
         call: callReducer,
         devices: deviceReducer,
+        settings: settingsReducer,
     },
 });
 
