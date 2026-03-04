@@ -2,10 +2,9 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import {
-    CircleDot,
     MessageSquare,
     Phone,
-    Settings,
+    Settings
 } from 'lucide-react-native';
 import React, { useCallback, useEffect } from 'react';
 import {
@@ -32,9 +31,11 @@ const SPRING_CONFIG = {
 };
 
 /* ─── Icons Map ────────────────────────────────────────────────────────────── */
+import { CircleDashed } from 'lucide-react-native';
+
 const ICONS: Record<string, any> = {
     Chats: MessageSquare,
-    Status: CircleDot,
+    Status: CircleDashed,
     Calls: Phone,
     Settings: Settings,
 };
@@ -64,7 +65,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
 
     return (
         <View style={[styles.wrapper, { height: TAB_BAR_HEIGHT }]}>
-            <BlurView intensity={85} tint="dark" style={StyleSheet.absoluteFill}>
+            <BlurView intensity={95} tint="dark" style={StyleSheet.absoluteFill}>
                 <View style={styles.overlay} />
             </BlurView>
 
@@ -139,7 +140,7 @@ const TabItem = React.memo(({
     const Icon = ICONS[name] || MessageSquare;
 
     const animatedIconStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }],
+        transform: [{ scale: withSpring(scale.value, { damping: 15, stiffness: 200 }) }],
     }));
 
     const activeIconStyle = useAnimatedStyle(() => ({
@@ -156,11 +157,12 @@ const TabItem = React.memo(({
     }));
 
     const handlePressIn = () => {
-        scale.value = withSpring(0.9, { damping: 12, stiffness: 200 });
+        scale.value = 0.85;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     };
 
     const handlePressOut = () => {
-        scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+        scale.value = 1;
     };
 
     return (
@@ -190,22 +192,26 @@ const TabItem = React.memo(({
 const styles = StyleSheet.create({
     wrapper: {
         position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
+        bottom: 12,
+        left: 12,
+        right: 12,
         backgroundColor: 'transparent',
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,
+        borderBottomLeftRadius: 28,
+        borderBottomRightRadius: 28,
         overflow: 'hidden',
-        elevation: 20,
+        elevation: 24,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     overlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        backgroundColor: 'rgba(0, 0, 0, 0.65)',
     },
     topBorder: {
         position: 'absolute',
@@ -249,12 +255,14 @@ const styles = StyleSheet.create({
     },
     indicatorPill: {
         position: 'absolute',
-        top: 7, // Refined for better centering with the 32px iconBox
+        top: 6, // Refined for exact vertical centering
         alignSelf: 'center',
         width: 52,
         height: 32,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
 });
 

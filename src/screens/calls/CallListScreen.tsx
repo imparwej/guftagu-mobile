@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     FlatList,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
 import { clearCallLog, deleteCall } from '../../store/slices/callSlice';
 import { RootState } from '../../store/store';
@@ -30,15 +31,46 @@ if (Platform.OS === 'android') {
 import CallHistoryItem from '../../components/calls/CallHistoryItem';
 import CallsHeader from '../../components/calls/CallsHeader';
 import EmptyCallsState from '../../components/calls/EmptyCallsState';
+import Skeleton from '../../components/Skeleton';
+
+/* ─── Skeleton Loader ────────────────────────────────────────────────────── */
+const CallsSkeleton = () => (
+    <View style={{ flex: 1, paddingHorizontal: 0 }}>
+        <View style={{ height: 140, backgroundColor: theme.colors.background, paddingHorizontal: 20, paddingTop: 60 }}>
+            <Skeleton width="40%" height={32} style={{ marginBottom: 20 }} />
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+                <Skeleton width={100} height={36} borderRadius={20} />
+                <Skeleton width={100} height={36} borderRadius={20} />
+            </View>
+        </View>
+        <Skeleton width="30%" height={13} style={{ marginBottom: 12, marginTop: 20, marginLeft: 20 }} />
+        {[1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={{ flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' }}>
+                <Skeleton width={50} height={50} borderRadius={25} style={{ marginRight: 16 }} />
+                <View style={{ flex: 1 }}>
+                    <Skeleton width="50%" height={16} style={{ marginBottom: 8 }} />
+                    <Skeleton width="30%" height={12} />
+                </View>
+                <Skeleton width={24} height={24} borderRadius={12} />
+            </View>
+        ))}
+    </View>
+);
 
 const CallListScreen = ({ navigation }: any) => {
     const dispatch = useDispatch();
     const { calls } = useSelector((state: RootState) => state.call);
     const { chats } = useSelector((state: RootState) => state.chat);
 
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCall, setSelectedCall] = useState<Call | null>(null);
     const [contextMenuVisible, setContextMenuVisible] = useState(false);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setIsLoading(false), 1200);
+        return () => clearTimeout(timer);
+    }, []);
 
     // Get user info from chats
     const getUserInfo = useCallback((userId: string) => {
@@ -166,46 +198,52 @@ const CallListScreen = ({ navigation }: any) => {
         <SafeAreaView style={styles.container} edges={['top']}>
             <StatusBar barStyle="light-content" />
 
-            <CallsHeader
-                onSearchChange={setSearchQuery}
-                onClearLog={handleClearLog}
-                onGoToSettings={() => navigation.navigate('Settings')}
-            />
+            {isLoading ? (
+                <CallsSkeleton />
+            ) : (
+                <>
+                    <CallsHeader
+                        onSearchChange={setSearchQuery}
+                        onClearLog={handleClearLog}
+                        onGoToSettings={() => navigation.navigate('Settings')}
+                    />
 
-            <FlatList
-                data={groupedCalls}
-                keyExtractor={(item, index) => (item.id || item.title) + index}
-                renderItem={renderItem}
-                contentContainerStyle={styles.listContainer}
-                ListEmptyComponent={<EmptyCallsState />}
-                showsVerticalScrollIndicator={false}
-            />
+                    <FlatList
+                        data={groupedCalls}
+                        keyExtractor={(item, index) => (item.id || item.title) + index}
+                        renderItem={renderItem}
+                        contentContainerStyle={styles.listContainer}
+                        ListEmptyComponent={<EmptyCallsState />}
+                        showsVerticalScrollIndicator={false}
+                    />
 
-            {/* Context Menu Modal */}
-            <Modal
-                transparent
-                visible={contextMenuVisible}
-                onRequestClose={() => setContextMenuVisible(false)}
-                animationType="fade"
-            >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setContextMenuVisible(false)}
-                >
-                    <View style={styles.contextMenu}>
-                        <TouchableOpacity style={styles.menuOption} onPress={handleViewContact}>
-                            <Text style={styles.menuText}>View contact</Text>
-                        </TouchableOpacity>
+                    {/* Context Menu Modal */}
+                    <Modal
+                        transparent
+                        visible={contextMenuVisible}
+                        onRequestClose={() => setContextMenuVisible(false)}
+                        animationType="fade"
+                    >
                         <TouchableOpacity
-                            style={[styles.menuOption, styles.destructiveOption]}
-                            onPress={handleDeleteCall}
+                            style={styles.modalOverlay}
+                            activeOpacity={1}
+                            onPress={() => setContextMenuVisible(false)}
                         >
-                            <Text style={[styles.menuText, styles.destructiveText]}>Delete call</Text>
+                            <View style={styles.contextMenu}>
+                                <PressableScale style={styles.menuOption} onPress={handleViewContact}>
+                                    <Text style={styles.menuText}>View contact</Text>
+                                </PressableScale>
+                                <PressableScale
+                                    style={[styles.menuOption, styles.destructiveOption]}
+                                    onPress={handleDeleteCall}
+                                >
+                                    <Text style={[styles.menuText, styles.destructiveText]}>Delete call</Text>
+                                </PressableScale>
+                            </View>
                         </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+                    </Modal>
+                </>
+            )}
         </SafeAreaView>
     );
 };

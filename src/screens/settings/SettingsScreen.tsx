@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 
@@ -137,11 +138,12 @@ const SettingsScreen = ({ navigation }: any) => {
         );
 
         return (
-            <TouchableOpacity
+            <PressableScale
                 style={[
                     styles.itemContainer,
                     isMatched && styles.matchedItem
                 ]}
+                scaleTo={0.97}
                 onPress={() => {
                     if (item.id === 'invite') {
                         handleInviteFriend();
@@ -157,8 +159,8 @@ const SettingsScreen = ({ navigation }: any) => {
                     <Text style={styles.itemTitle}>{item.title}</Text>
                     {item.subtitle && <Text style={styles.itemSubtitle}>{item.subtitle}</Text>}
                 </View>
-                <LucideChevronRight color={theme.colors.text.tertiary} size={20} />
-            </TouchableOpacity>
+                <LucideChevronRight color={theme.colors.text.tertiary} size={18} />
+            </PressableScale>
         );
     };
 
@@ -189,19 +191,26 @@ const SettingsScreen = ({ navigation }: any) => {
                 )}
             </View>
 
-            <TouchableOpacity
-                style={styles.profileCard}
-                onPress={() => navigation.navigate('Profile')}
-            >
-                <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'U'}</Text>
-                </View>
-                <View style={styles.profileInfo}>
-                    <Text style={styles.profileName}>{user?.name || 'User'}</Text>
-                    <Text style={styles.profileAbout}>{user?.about || 'Hey there! I am using Guftagu.'}</Text>
-                </View>
-                <LucideChevronRight color={theme.colors.text.tertiary} size={24} />
-            </TouchableOpacity>
+            <View style={styles.profileSection}>
+                <PressableScale
+                    style={styles.profileCard}
+                    scaleTo={0.98}
+                    onPress={() => navigation.navigate('Profile')}
+                >
+                    <View style={styles.avatarContainer}>
+                        <View style={styles.avatarPlaceholder}>
+                            <Text style={styles.avatarText}>{user?.name?.charAt(0) || 'U'}</Text>
+                        </View>
+                    </View>
+                    <View style={styles.profileInfo}>
+                        <Text style={styles.profileName}>{user?.name || 'User'}</Text>
+                        <Text style={styles.profileAbout} numberOfLines={1}>
+                            {user?.about || 'Hey there! I am using Guftagu.'}
+                        </Text>
+                    </View>
+                    <LucideChevronRight color={theme.colors.text.tertiary} size={22} />
+                </PressableScale>
+            </View>
 
             <FlatList
                 data={filteredItems}
@@ -253,37 +262,55 @@ const styles = StyleSheet.create({
         fontSize: 16,
         padding: 0,
     },
+    profileSection: {
+        padding: 16,
+        paddingBottom: 8,
+    },
     profileCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
+        padding: 16,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 5,
+    },
+    avatarContainer: {
+        padding: 2,
+        borderRadius: 34,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        marginRight: 16,
     },
     avatarPlaceholder: {
         width: 60,
         height: 60,
         borderRadius: 30,
-        backgroundColor: theme.colors.accent,
+        backgroundColor: '#FFFFFF',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16,
     },
     avatarText: {
-        color: '#fff',
-        fontSize: 24,
-        fontWeight: 'bold',
+        color: '#000',
+        fontSize: 26,
+        fontWeight: '700',
     },
     profileInfo: {
         flex: 1,
     },
     profileName: {
         color: theme.colors.text.primary,
-        fontSize: 18,
-        fontWeight: 'bold',
+        fontSize: 20,
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
     profileAbout: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255,255,255,0.5)',
         fontSize: 14,
         marginTop: 4,
     },

@@ -37,7 +37,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useDispatch, useSelector } from 'react-redux';
 import GuftaguLogo from '../../../assets/images/favicon.svg';
+import EmptyState from '../../components/EmptyState';
 import PressableScale from '../../components/PressableScale';
+import Skeleton from '../../components/Skeleton';
 import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
 import {
     clearChat,
@@ -82,12 +84,32 @@ const formatTime = (timestamp: string): string => {
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
+
+/* ─── Skeleton Loader ────────────────────────────────────────────────────── */
+const ChatSkeleton = () => (
+    <View style={styles.listContainer}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+            <View key={i} style={styles.chatItem}>
+                <Skeleton width={54} height={54} borderRadius={27} style={{ marginRight: 14 }} />
+                <View style={{ flex: 1, justifyContent: 'center' }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <Skeleton width="40%" height={16} />
+                        <Skeleton width="15%" height={12} />
+                    </View>
+                    <Skeleton width="70%" height={14} />
+                </View>
+            </View>
+        ))}
+    </View>
+);
+
 /* ─── Main Component ───────────────────────────────────────────────────────── */
 const ChatListScreen = ({ navigation }: any) => {
     const dispatch = useDispatch();
     const { chats, messages } = useSelector((state: RootState) => state.chat);
 
     // Local state
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState<FilterType>('all');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -95,8 +117,12 @@ const ChatListScreen = ({ navigation }: any) => {
     const [contextMenuVisible, setContextMenuVisible] = useState(false);
     const [contextChatId, setContextChatId] = useState<string | null>(null);
 
-
     const isSelectionMode = selectedIds.size > 0;
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => setIsLoading(false), 1200);
+        return () => clearTimeout(timer);
+    }, []);
 
     /* ─── Derived data ──────────────────────────────────────────────────── */
     const filteredChats = useMemo(() => {
@@ -391,29 +417,33 @@ const ChatListScreen = ({ navigation }: any) => {
             )}
 
             {/* ── Chat List ────────────────────────────────────────────── */}
-            <FlatList
-                data={filteredChats}
-                keyExtractor={item => item.id}
-                renderItem={renderChatItem}
-                contentContainerStyle={[
-                    styles.listContainer,
-                    filteredChats.length === 0 && styles.listEmpty,
-                ]}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    <Animated.View entering={FadeIn.duration(400)} style={styles.emptyContainer}>
-                        <Search color="rgba(255,255,255,0.15)" size={52} />
-                        <Text style={styles.emptyTitle}>
-                            {searchQuery ? 'No results' : 'No chats yet'}
-                        </Text>
-                        <Text style={styles.emptySubtitle}>
-                            {searchQuery
-                                ? `No chats matching "${searchQuery}"`
-                                : 'Tap the button below to start a conversation'}
-                        </Text>
-                    </Animated.View>
-                }
-            />
+            {isLoading ? (
+                <ChatSkeleton />
+            ) : (
+                <FlatList
+                    data={filteredChats}
+                    keyExtractor={item => item.id}
+                    renderItem={renderChatItem}
+                    contentContainerStyle={[
+                        styles.listContainer,
+                        filteredChats.length === 0 && styles.listEmpty,
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        <Animated.View entering={FadeIn.duration(400)} style={styles.emptyContainer}>
+                            <EmptyState
+                                icon={Search}
+                                title={searchQuery ? 'No results' : 'No chats yet'}
+                                description={searchQuery
+                                    ? `No chats matching "${searchQuery}"`
+                                    : 'Tap the button below to start a conversation'}
+                                actionLabel={searchQuery ? 'Clear Search' : undefined}
+                                onAction={searchQuery ? () => setSearchQuery('') : undefined}
+                            />
+                        </Animated.View>
+                    }
+                />
+            )}
 
             {/* ── FAB ──────────────────────────────────────────────────── */}
             {!isSelectionMode && (

@@ -164,6 +164,30 @@ const chatSlice = createSlice({
                 state.chats.unshift(action.payload);
             }
         },
+        toggleReaction: (state, action: PayloadAction<{ chatId: string; messageId: string; userId: string; emoji: string }>) => {
+            const { chatId, messageId, userId, emoji } = action.payload;
+            const messages = state.messages[chatId];
+            if (!messages) return;
+
+            const message = messages.find(m => m.id === messageId);
+            if (!message) return;
+
+            if (!message.reactions) {
+                message.reactions = {};
+            }
+
+            const users = message.reactions[emoji] || [];
+            if (users.includes(userId)) {
+                // Remove reaction
+                message.reactions[emoji] = users.filter(id => id !== userId);
+                if (message.reactions[emoji].length === 0) {
+                    delete message.reactions[emoji];
+                }
+            } else {
+                // Add reaction
+                message.reactions[emoji] = [...users, userId];
+            }
+        },
     },
 });
 
@@ -187,6 +211,7 @@ export const {
     markAllAsRead,
     clearChat,
     addChat,
+    toggleReaction,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

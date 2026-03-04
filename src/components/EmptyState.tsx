@@ -1,24 +1,43 @@
+import { LucideIcon } from 'lucide-react-native';
 import React from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { theme } from '../theme/theme';
+import PressableScale from './PressableScale';
 
 interface EmptyStateProps {
-    icon: React.ReactNode;
+    icon: LucideIcon;
     title: string;
     description?: string;
+    actionLabel?: string;
+    onAction?: () => void;
     style?: StyleProp<ViewStyle>;
 }
 
-const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description, style }) => {
+const EmptyState: React.FC<EmptyStateProps> = ({
+    icon: Icon,
+    title,
+    description,
+    actionLabel,
+    onAction,
+    style
+}) => {
     return (
         <Animated.View
             entering={FadeInDown.duration(600).springify()}
             style={[styles.container, style]}
         >
-            <View style={styles.iconContainer}>{icon}</View>
+            <View style={styles.iconContainer}>
+                <Icon size={52} color={theme.colors.text.tertiary} strokeWidth={1.5} />
+            </View>
             <Text style={styles.title}>{title}</Text>
             {description && <Text style={styles.description}>{description}</Text>}
+
+            {actionLabel && onAction && (
+                <PressableScale style={styles.actionBtn} onPress={onAction}>
+                    <Text style={styles.actionText}>{actionLabel}</Text>
+                </PressableScale>
+            )}
         </Animated.View>
     );
 };
@@ -32,7 +51,7 @@ const styles = StyleSheet.create({
     },
     iconContainer: {
         marginBottom: theme.spacing.lg,
-        opacity: 0.5,
+        opacity: 0.6,
     },
     title: {
         color: theme.colors.text.primary,
@@ -46,6 +65,18 @@ const styles = StyleSheet.create({
         fontSize: theme.typography.sizes.md,
         textAlign: 'center',
         lineHeight: 20,
+        marginBottom: theme.spacing.lg,
+    },
+    actionBtn: {
+        backgroundColor: theme.colors.accent,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: theme.radius.full,
+    },
+    actionText: {
+        color: theme.colors.background,
+        fontSize: 15,
+        fontWeight: '700',
     },
 });
 

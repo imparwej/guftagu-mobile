@@ -1,4 +1,5 @@
 import {
+    LucideIcon,
     LucidePhone,
     LucidePhoneIncoming,
     LucidePhoneMissed,
@@ -10,11 +11,11 @@ import {
     Image,
     StyleSheet,
     Text,
-    TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import { theme } from '../../theme/theme';
 import { Call } from '../../types';
+import PressableScale from '../PressableScale';
 
 interface CallHistoryItemProps {
     item: Call;
@@ -36,7 +37,7 @@ const CallHistoryItem: React.FC<CallHistoryItemProps> = React.memo(({
 }) => {
     const isMissed = item.status === 'missed';
 
-    let StatusIcon = LucidePhoneIncoming;
+    let StatusIcon: LucideIcon = LucidePhoneIncoming;
     let iconColor = theme.colors.text.secondary;
 
     if (isMissed) {
@@ -52,13 +53,16 @@ const CallHistoryItem: React.FC<CallHistoryItemProps> = React.memo(({
     };
 
     return (
-        <TouchableOpacity
+        <PressableScale
             style={styles.container}
             onPress={() => onPress(item)}
             onLongPress={() => onLongPress(item)}
-            activeOpacity={0.7}
+            scaleTo={0.98}
         >
-            <Image source={{ uri: user.avatar }} style={styles.avatar} />
+            <View style={styles.avatarContainer}>
+                <Image source={{ uri: user.avatar }} style={styles.avatar} />
+                {isMissed && <View style={styles.missedIndicator} />}
+            </View>
 
             <View style={styles.content}>
                 <View style={styles.mainInfo}>
@@ -77,18 +81,21 @@ const CallHistoryItem: React.FC<CallHistoryItemProps> = React.memo(({
                     </View>
                 </View>
 
-                <TouchableOpacity
+                <PressableScale
                     onPress={() => onCallPress(item)}
                     style={styles.actionButton}
+                    scaleTo={0.85}
                 >
-                    {item.type === 'video' ? (
-                        <LucideVideo size={24} color={theme.colors.accent} />
-                    ) : (
-                        <LucidePhone size={22} color={theme.colors.accent} />
-                    )}
-                </TouchableOpacity>
+                    <View style={styles.iconCircle}>
+                        {item.type === 'video' ? (
+                            <LucideVideo size={20} color={theme.colors.text.primary} />
+                        ) : (
+                            <LucidePhone size={18} color={theme.colors.text.primary} />
+                        )}
+                    </View>
+                </PressableScale>
             </View>
-        </TouchableOpacity>
+        </PressableScale>
     );
 });
 
@@ -99,11 +106,25 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         alignItems: 'center',
     },
+    avatarContainer: {
+        position: 'relative',
+    },
     avatar: {
         width: 52,
         height: 52,
         borderRadius: 26,
         backgroundColor: theme.colors.surface,
+    },
+    missedIndicator: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: theme.colors.error,
+        borderWidth: 2,
+        borderColor: theme.colors.background,
     },
     content: {
         flex: 1,
@@ -111,9 +132,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginLeft: 16,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: theme.colors.border,
+        borderBottomColor: 'rgba(255,255,255,0.06)',
         paddingBottom: 12,
-        height: '100%',
     },
     mainInfo: {
         flex: 1,
@@ -121,7 +141,7 @@ const styles = StyleSheet.create({
     },
     name: {
         color: theme.colors.text.primary,
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: '600',
         marginBottom: 4,
     },
@@ -136,12 +156,19 @@ const styles = StyleSheet.create({
         marginRight: 6,
     },
     time: {
-        color: theme.colors.text.secondary,
-        fontSize: 14,
+        color: theme.colors.text.tertiary,
+        fontSize: 13,
     },
     actionButton: {
-        padding: 10,
         marginLeft: 8,
+    },
+    iconCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 

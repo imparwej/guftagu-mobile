@@ -7,8 +7,9 @@ import {
     LucideUser,
 } from 'lucide-react-native';
 import React, { useCallback } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, Layout as LayoutAnim } from 'react-native-reanimated';
+import PressableScale from '../../../components/PressableScale';
 import { theme } from '../../../theme/theme';
 import { Message } from '../../../types';
 
@@ -22,6 +23,7 @@ interface MessageBubbleProps {
     onLongPress: (message: Message) => void;
     replyPreviewText?: string;
     isHighlighted?: boolean;
+    searchQuery?: string;
 }
 
 const SENDER_COLORS = [
@@ -179,6 +181,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
     onLongPress,
     replyPreviewText,
     isHighlighted = false,
+    searchQuery = '',
 }) => {
     const handleLongPress = useCallback(() => {
         onLongPress(message);
@@ -204,14 +207,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                 isHighlighted && styles.containerHighlighted,
             ]}
         >
-            <Pressable
+            <PressableScale
                 onLongPress={handleLongPress}
                 delayLongPress={350}
-                style={({ pressed }) => [
+                scaleTo={0.96}
+                style={[
                     styles.bubble,
                     isMine ? styles.bubbleMine : styles.bubbleOther,
                     bubbleRadius,
-                    pressed && styles.bubblePressed,
                 ]}
             >
                 {/* Starred indicator */}
@@ -243,7 +246,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                 {/* Text content - skip for media-only types that use text differently */}
                 {message.text && !['location', 'contact'].includes(message.mediaType || '') && (
                     <Text style={[styles.text, isMine ? styles.textMine : styles.textOther]}>
-                        {message.text}
+                        {(() => {
+                            if (!searchQuery || !message.text.toLowerCase().includes(searchQuery.toLowerCase())) {
+                                return message.text;
+                            }
+                            const parts = message.text.split(new RegExp(`(${searchQuery})`, 'gi'));
+                            return parts.map((part, i) => (
+                                part.toLowerCase() === searchQuery.toLowerCase() ? (
+                                    <Text key={i} style={styles.highlight}>{part}</Text>
+                                ) : part
+                            ));
+                        })()}
                     </Text>
                 )}
 
@@ -254,7 +267,22 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                     </Text>
                     {isMine && <StatusTicks status={message.status} />}
                 </View>
-            </Pressable>
+
+                {/* Reactions */}
+                {message.reactions && Object.keys(message.reactions).length > 0 && (
+                    <View style={[
+                        styles.reactionsContainer,
+                        isMine ? styles.reactionsMine : styles.reactionsOther
+                    ]}>
+                        {Object.entries(message.reactions).map(([emoji, users]) => (
+                            <View key={emoji} style={styles.reactionBadge}>
+                                <Text style={styles.reactionText}>{emoji}</Text>
+                                <Text style={styles.reactionCount}>{users.length}</Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+            </PressableScale>
         </Animated.View>
     );
 });
@@ -282,18 +310,15 @@ const styles = StyleSheet.create({
     bubbleMine: {
         backgroundColor: '#FFFFFF',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        elevation: 1,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
+        elevation: 3,
     },
     bubbleOther: {
-        backgroundColor: '#1A1A1A',
+        backgroundColor: '#1C1C1E',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
-    },
-    bubblePressed: {
-        opacity: 0.85,
+        borderColor: 'rgba(255,255,255,0.08)',
     },
     starBadge: {
         position: 'absolute',
@@ -338,6 +363,11 @@ const styles = StyleSheet.create({
     time: {
         fontSize: 10.5,
         fontWeight: '400',
+    },
+    highlight: {
+        backgroundColor: '#FFD60A',
+        color: '#000000',
+        borderRadius: 2,
     },
     tick: {
         fontSize: 11,
@@ -468,6 +498,38 @@ const styles = StyleSheet.create({
     contactPhone: {
         fontSize: 12,
         marginTop: 2,
+    },
+    reactionsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        position: 'absolute',
+        bottom: -10,
+        gap: 4,
+    },
+    reactionsMine: {
+        right: 14,
+    },
+    reactionsOther: {
+        left: 14,
+    },
+    reactionBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2C2C2E',
+        borderRadius: 12,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderWidth: 1.5,
+        borderColor: '#1C1C1E',
+        gap: 3,
+    },
+    reactionText: {
+        fontSize: 12,
+    },
+    reactionCount: {
+        color: '#FFFFFF',
+        fontSize: 10,
+        fontWeight: '600',
     },
 });
 

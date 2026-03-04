@@ -11,6 +11,7 @@ interface ChatSearchBarProps {
     onClose: () => void;
     onScrollToIndex: (index: number) => void;
     onHighlightedIds: (ids: string[]) => void;
+    onQueryChange?: (query: string) => void;
 }
 
 const ChatSearchBar: React.FC<ChatSearchBarProps> = ({
@@ -19,6 +20,7 @@ const ChatSearchBar: React.FC<ChatSearchBarProps> = ({
     onClose,
     onScrollToIndex,
     onHighlightedIds,
+    onQueryChange,
 }) => {
     const [query, setQuery] = useState('');
     const [matchIndices, setMatchIndices] = useState<number[]>([]);
@@ -38,6 +40,7 @@ const ChatSearchBar: React.FC<ChatSearchBarProps> = ({
 
     const handleSearch = useCallback((text: string) => {
         setQuery(text);
+        onQueryChange?.(text);
         if (!text.trim()) {
             setMatchIndices([]);
             setCurrentMatchPos(0);
@@ -59,7 +62,7 @@ const ChatSearchBar: React.FC<ChatSearchBarProps> = ({
             setCurrentMatchPos(0);
             onScrollToIndex(indices[0]);
         }
-    }, [messages, onHighlightedIds, onScrollToIndex]);
+    }, [messages, onHighlightedIds, onScrollToIndex, onQueryChange]);
 
     const navigateMatch = useCallback((direction: 'up' | 'down') => {
         if (matchIndices.length === 0) return;
@@ -101,7 +104,7 @@ const ChatSearchBar: React.FC<ChatSearchBarProps> = ({
             />
             {matchIndices.length > 0 && (
                 <Text style={styles.count}>
-                    {currentMatchPos + 1}/{matchIndices.length}
+                    {currentMatchPos + 1} of {matchIndices.length}
                 </Text>
             )}
             <Pressable

@@ -32,6 +32,8 @@ export interface Message {
     contactPhone?: string;
     // Voice message
     voiceDuration?: number;
+    // Reactions: emoji -> list of userIds
+    reactions?: Record<string, string[]>;
 }
 
 export interface Chat {

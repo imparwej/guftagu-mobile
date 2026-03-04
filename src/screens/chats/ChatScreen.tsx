@@ -24,6 +24,7 @@ import {
     setWallpaper,
     starMessage,
     toggleMute,
+    toggleReaction,
     unblockChat,
     updateMessageStatus,
 } from '../../store/slices/chatSlice';
@@ -53,6 +54,16 @@ const AUTO_REPLIES = [
     'I\'ll check and let you know.',
 ];
 
+const getSmartSuggestions = (messageText: string): string[] => {
+    const lower = messageText.toLowerCase();
+    if (lower.includes('how are you')) return ['Doing great!', 'I am good', 'How about you?'];
+    if (lower.includes('where are you')) return ['On my way', 'Almost there', 'At home'];
+    if (lower.includes('hello') || lower.includes('hi')) return ['Hey!', 'Hi there', 'Hello!'];
+    if (lower.includes('thanks') || lower.includes('thank you')) return ['You\'re welcome', 'Anytime!', 'No problem'];
+    if (lower.includes('ok') || lower.includes('okay')) return ['Cool', 'Sounds good', '👍'];
+    return ['Got it', 'Okay', 'Thanks'];
+};
+
 const ChatScreen = ({ navigation }: any) => {
     const [text, setText] = useState('');
     const [showAttachments, setShowAttachments] = useState(false);
@@ -62,9 +73,11 @@ const ChatScreen = ({ navigation }: any) => {
     const [showEmoji, setShowEmoji] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const [showWallpaper, setShowWallpaper] = useState(false);
     const [highlightedMessageIds, setHighlightedMessageIds] = useState<string[]>([]);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [suggestions, setSuggestions] = useState<string[]>([]);
 
     const dispatch = useDispatch();
     const { activeChatId, chats, messages } = useSelector((state: RootState) => state.chat);
@@ -119,14 +132,16 @@ const ChatScreen = ({ navigation }: any) => {
             setTimeout(() => {
                 setIsTyping(false);
                 if (!activeChatId) return;
-                dispatch(addMessage({
+                const newIncomingMsg: Message = {
                     id: (Date.now() + 1).toString(),
                     chatId: activeChatId,
                     senderId: chat?.participants?.[1] || 'other',
                     text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
                     timestamp: new Date().toISOString(),
                     status: 'read',
-                }));
+                };
+                dispatch(addMessage(newIncomingMsg));
+                setSuggestions(getSmartSuggestions(newIncomingMsg.text || ''));
             }, 2500);
         }, 1800);
     }, [text, isBlocked, activeChatId, chat, sendMessage, dispatch]);
@@ -171,6 +186,7 @@ const ChatScreen = ({ navigation }: any) => {
                 break;
             case 'search':
                 setShowSearch(true);
+                setSearchQuery('');
                 break;
             case 'mute':
                 dispatch(toggleMute([activeChatId]));
@@ -246,6 +262,18 @@ const ChatScreen = ({ navigation }: any) => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 break;
             case 'info':
+                break;
+            default:
+                if (action.startsWith('react:')) {
+                    const emoji = action.split(':')[1];
+                    dispatch(toggleReaction({
+                        chatId: activeChatId,
+                        messageId: longPressMessage.id,
+                        userId: currentUser?.id || 'me',
+                        emoji
+                    }));
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
                 break;
         }
         setLongPressMessage(null);
@@ -418,9 +446,10 @@ const ChatScreen = ({ navigation }: any) => {
                 onLongPress={handleMessageLongPress}
                 replyPreviewText={replyPreviewText}
                 isHighlighted={isHighlighted}
+                searchQuery={searchQuery}
             />
         );
-    }, [currentUser, chatMessages, isGroup, handleMessageLongPress, highlightedMessageIds]);
+    }, [currentUser, chatMessages, isGroup, handleMessageLongPress, highlightedMessageIds, searchQuery]);
 
     const keyExtractor = useCallback((item: Message) => item.id, []);
 
@@ -447,9 +476,13 @@ const ChatScreen = ({ navigation }: any) => {
             <ChatSearchBar
                 visible={showSearch}
                 messages={chatMessages}
-                onClose={() => setShowSearch(false)}
+                onClose={() => {
+                    setShowSearch(false);
+                    setSearchQuery('');
+                }}
                 onScrollToIndex={handleScrollToIndex}
                 onHighlightedIds={setHighlightedMessageIds}
+                onQueryChange={setSearchQuery}
             />
 
             {/* Header Menu */}
@@ -550,8 +583,8 @@ const ChatScreen = ({ navigation }: any) => {
                         text={text}
                         onChangeText={(t) => {
                             setText(t);
-                            if (showEmoji && t.length > text.length) {
-                                // Don't auto-close emoji on emoji-inserted text
+                            if (t.length > 0) {
+                                setSuggestions([]);
                             }
                         }}
                         onSend={handleSendText}
@@ -566,6 +599,11 @@ const ChatScreen = ({ navigation }: any) => {
                         showAttachments={showAttachments}
                         bottomInset={insets.bottom}
                         disabled={isBlocked}
+                        suggestions={suggestions}
+                        onSuggestionPress={(suggestion) => {
+                            setText(suggestion);
+                            setSuggestions([]);
+                        }}
                     />
                 )}
             </KeyboardAvoidingView>

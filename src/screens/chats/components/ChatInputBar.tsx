@@ -6,7 +6,7 @@ import {
     LucideSmile,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
     interpolate,
     useAnimatedStyle,
@@ -27,6 +27,8 @@ interface ChatInputBarProps {
     showAttachments: boolean;
     bottomInset?: number;
     disabled?: boolean;
+    suggestions?: string[];
+    onSuggestionPress?: (suggestion: string) => void;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -44,6 +46,8 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
     showAttachments,
     bottomInset = 0,
     disabled = false,
+    suggestions = [],
+    onSuggestionPress,
 }) => {
     const hasText = text.trim().length > 0;
     const morphProgress = useSharedValue(0);
@@ -83,75 +87,98 @@ const ChatInputBar: React.FC<ChatInputBarProps> = React.memo(({
     }, [hasText, onSend]);
 
     return (
-        <View style={[styles.container, { paddingBottom: Math.max(bottomInset, 8) }]}>
-            {/* Attachment button */}
-            <Pressable
-                style={({ pressed }) => [styles.sideBtn, pressed && styles.pressed]}
-                onPress={onAttachPress}
-                hitSlop={6}
-            >
-                <LucidePaperclip
-                    color={showAttachments ? theme.colors.text.primary : theme.colors.text.secondary}
-                    size={21}
-                    style={showAttachments ? { transform: [{ rotate: '45deg' }] } : undefined}
-                />
-            </Pressable>
+        <View style={{ paddingBottom: Math.max(bottomInset, 8) }}>
+            {/* Suggestions Bar */}
+            {suggestions.length > 0 && !hasText && (
+                <View style={styles.suggestionsContainer}>
+                    <FlatList
+                        data={suggestions}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        keyExtractor={(item) => item}
+                        contentContainerStyle={styles.suggestionsList}
+                        renderItem={({ item }) => (
+                            <Pressable
+                                style={styles.suggestionBtn}
+                                onPress={() => onSuggestionPress?.(item)}
+                            >
+                                <Text style={styles.suggestionText}>{item}</Text>
+                            </Pressable>
+                        )}
+                    />
+                </View>
+            )}
 
-            {/* Input field container */}
-            <View style={styles.inputWrapper}>
-                {/* Emoji button */}
+            <View style={styles.container}>
+                {/* Attachment button */}
                 <Pressable
-                    style={({ pressed }) => [styles.inlineBtn, pressed && styles.pressed]}
-                    onPress={onEmojiPress}
-                    hitSlop={4}
+                    style={({ pressed }) => [styles.sideBtn, pressed && styles.pressed]}
+                    onPress={onAttachPress}
+                    hitSlop={6}
                 >
-                    <LucideSmile color={theme.colors.text.secondary} size={20} />
+                    <LucidePaperclip
+                        color={showAttachments ? theme.colors.text.primary : theme.colors.text.secondary}
+                        size={21}
+                        style={showAttachments ? { transform: [{ rotate: '45deg' }] } : undefined}
+                    />
                 </Pressable>
 
-                <TextInput
-                    ref={inputRef}
-                    style={[styles.input, disabled && { opacity: 0.4 }]}
-                    value={text}
-                    onChangeText={onChangeText}
-                    placeholder={disabled ? 'Blocked' : 'Message'}
-                    placeholderTextColor="rgba(255,255,255,0.25)"
-                    multiline
-                    maxLength={4000}
-                    editable={!disabled}
-                />
+                {/* Input field container */}
+                <View style={styles.inputWrapper}>
+                    {/* Emoji button */}
+                    <Pressable
+                        style={({ pressed }) => [styles.inlineBtn, pressed && styles.pressed]}
+                        onPress={onEmojiPress}
+                        hitSlop={4}
+                    >
+                        <LucideSmile color={theme.colors.text.secondary} size={20} />
+                    </Pressable>
 
-                {/* Camera icon - only when no text */}
-                <AnimatedPressable
-                    style={[styles.inlineBtn, cameraStyle]}
-                    onPress={onCameraPress}
-                    hitSlop={4}
-                    pointerEvents={hasText ? 'none' : 'auto'}
-                >
-                    <LucideCamera color={theme.colors.text.secondary} size={20} />
-                </AnimatedPressable>
-            </View>
+                    <TextInput
+                        ref={inputRef}
+                        style={[styles.input, disabled && { opacity: 0.4 }]}
+                        value={text}
+                        onChangeText={onChangeText}
+                        placeholder={disabled ? 'Blocked' : 'Message'}
+                        placeholderTextColor="rgba(255,255,255,0.25)"
+                        multiline
+                        maxLength={4000}
+                        editable={!disabled}
+                    />
 
-            {/* Mic / Send morph button */}
-            <View style={styles.morphContainer}>
-                {/* Mic button (background layer) */}
-                <AnimatedPressable
-                    style={[styles.morphBtn, micBtnStyle]}
-                    onPress={onMicPress}
-                    hitSlop={6}
-                    pointerEvents={hasText ? 'none' : 'auto'}
-                >
-                    <LucideMic color={theme.colors.text.primary} size={22} />
-                </AnimatedPressable>
+                    {/* Camera icon - only when no text */}
+                    <AnimatedPressable
+                        style={[styles.inlineBtn, cameraStyle]}
+                        onPress={onCameraPress}
+                        hitSlop={4}
+                        pointerEvents={hasText ? 'none' : 'auto'}
+                    >
+                        <LucideCamera color={theme.colors.text.secondary} size={20} />
+                    </AnimatedPressable>
+                </View>
 
-                {/* Send button (foreground layer) */}
-                <AnimatedPressable
-                    style={[styles.morphBtn, styles.sendBtn, sendBtnStyle]}
-                    onPress={handleSend}
-                    hitSlop={6}
-                    pointerEvents={hasText ? 'auto' : 'none'}
-                >
-                    <LucideSend color="#000" size={19} style={{ marginLeft: -2, marginTop: -1 }} />
-                </AnimatedPressable>
+                {/* Mic / Send morph button */}
+                <View style={styles.morphContainer}>
+                    {/* Mic button (background layer) */}
+                    <AnimatedPressable
+                        style={[styles.morphBtn, micBtnStyle]}
+                        onPress={onMicPress}
+                        hitSlop={6}
+                        pointerEvents={hasText ? 'none' : 'auto'}
+                    >
+                        <LucideMic color={theme.colors.text.primary} size={22} />
+                    </AnimatedPressable>
+
+                    {/* Send button (foreground layer) */}
+                    <AnimatedPressable
+                        style={[styles.morphBtn, styles.sendBtn, sendBtnStyle]}
+                        onPress={handleSend}
+                        hitSlop={6}
+                        pointerEvents={hasText ? 'auto' : 'none'}
+                    >
+                        <LucideSend color="#000" size={19} style={{ marginLeft: -2, marginTop: -1 }} />
+                    </AnimatedPressable>
+                </View>
             </View>
         </View>
     );
@@ -227,6 +254,27 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 8,
         elevation: 4,
+    },
+    suggestionsContainer: {
+        backgroundColor: theme.colors.background,
+        paddingVertical: 8,
+    },
+    suggestionsList: {
+        paddingHorizontal: 8,
+        gap: 8,
+    },
+    suggestionBtn: {
+        backgroundColor: '#1C1C1E',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    suggestionText: {
+        color: theme.colors.text.primary,
+        fontSize: 14,
+        fontWeight: '500',
     },
 });
 

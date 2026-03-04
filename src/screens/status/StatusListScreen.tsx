@@ -1,8 +1,10 @@
 import { LucideEye, LucideMoreVertical, LucidePlus, LucideX } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
+import Skeleton from '../../components/Skeleton';
 import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -11,7 +13,7 @@ import { Story } from '../../types';
 const StatusItem = ({ item, isViewed, onPress }: any) => {
     const borderStyle = isViewed ? styles.avatarBorderViewed : styles.avatarBorderUnviewed;
     return (
-        <TouchableOpacity style={styles.statusItem} onPress={() => onPress(item)} activeOpacity={0.7}>
+        <PressableScale style={styles.statusItem} onPress={() => onPress(item)} scaleTo={0.98}>
             <View style={[styles.avatarContainer, borderStyle]}>
                 <Image source={{ uri: item.avatar }} style={styles.avatar} />
             </View>
@@ -21,17 +23,50 @@ const StatusItem = ({ item, isViewed, onPress }: any) => {
                     {new Date(item.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
             </View>
-        </TouchableOpacity>
+        </PressableScale>
     );
 };
+
+/* ─── Skeleton Loader ────────────────────────────────────────────────────── */
+const StatusSkeleton = () => (
+    <View style={{ paddingHorizontal: 20 }}>
+        <View style={{ marginBottom: 20 }}>
+            <Skeleton width="40%" height={32} style={{ marginBottom: 20, marginTop: 20 }} />
+            <View style={styles.myStatusItem}>
+                <Skeleton width={64} height={64} borderRadius={32} style={{ marginRight: 16 }} />
+                <View style={{ flex: 1, justifyContent: 'center' }}>
+                    <Skeleton width="40%" height={16} style={{ marginBottom: 8 }} />
+                    <Skeleton width="60%" height={14} />
+                </View>
+            </View>
+        </View>
+        <Skeleton width="30%" height={13} style={{ marginBottom: 12, marginTop: 10 }} />
+        {[1, 2, 3].map((i) => (
+            <View key={i} style={styles.statusItem}>
+                <Skeleton width={64} height={64} borderRadius={32} style={{ marginRight: 16 }} />
+                <View style={{ flex: 1, justifyContent: 'center' }}>
+                    <Skeleton width="45%" height={16} style={{ marginBottom: 8 }} />
+                    <Skeleton width="25%" height={12} />
+                </View>
+            </View>
+        ))}
+    </View>
+);
 
 const StatusListScreen = ({ navigation }: any) => {
     const { stories } = useSelector((state: RootState) => state.status);
     const { chats } = useSelector((state: RootState) => state.chat);
     const currentUser = useSelector((state: RootState) => state.auth.user);
+
+    const [isLoading, setIsLoading] = useState(true);
     const [menuVisible, setMenuVisible] = useState(false);
     const [viewerListVisible, setViewerListVisible] = useState(false);
     const [selectedStoryForViewers, setSelectedStoryForViewers] = useState<Story | null>(null);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setIsLoading(false), 1200);
+        return () => clearTimeout(timer);
+    }, []);
 
     // Filter my stories (latest first)
     const myStories = useMemo(() =>
@@ -75,15 +110,15 @@ const StatusListScreen = ({ navigation }: any) => {
         return { recentUpdates: recent, viewedUpdates: viewed };
     }, [groupedStories, chats]);
 
-    const handlePressStatus = React.useCallback((userObj: any) => {
+    const handlePressStatus = useCallback((userObj: any) => {
         navigation.navigate('StatusViewer', { userId: userObj.userId, stories: userObj.stories, user: userObj });
     }, [navigation]);
 
-    const handleAddStatus = React.useCallback(() => {
+    const handleAddStatus = useCallback(() => {
         navigation.navigate('CreateStatus');
     }, [navigation]);
 
-    const handleViewViewerList = React.useCallback((story: Story) => {
+    const handleViewViewerList = useCallback((story: Story) => {
         setSelectedStoryForViewers(story);
         setViewerListVisible(true);
     }, []);
@@ -167,99 +202,106 @@ const StatusListScreen = ({ navigation }: any) => {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header Menu Modal */}
-            <Modal
-                transparent
-                visible={menuVisible}
-                onRequestClose={() => setMenuVisible(false)}
-                animationType="fade"
-            >
-                <TouchableOpacity
-                    style={styles.modalOverlay}
-                    activeOpacity={1}
-                    onPress={() => setMenuVisible(false)}
-                >
-                    <View style={styles.menuCard}>
+            {isLoading ? (
+                <StatusSkeleton />
+            ) : (
+                <>
+                    {/* Header Menu Modal */}
+                    <Modal
+                        transparent
+                        visible={menuVisible}
+                        onRequestClose={() => setMenuVisible(false)}
+                        animationType="fade"
+                    >
                         <TouchableOpacity
-                            style={styles.menuOption}
-                            onPress={() => {
-                                setMenuVisible(false);
-                                navigation.navigate('StatusPrivacy');
-                            }}
+                            style={styles.modalOverlay}
+                            activeOpacity={1}
+                            onPress={() => setMenuVisible(false)}
                         >
-                            <Text style={styles.menuText}>Status privacy</Text>
+                            <View style={styles.menuCard}>
+                                <TouchableOpacity
+                                    style={styles.menuOption}
+                                    onPress={() => {
+                                        setMenuVisible(false);
+                                        navigation.navigate('StatusPrivacy');
+                                    }}
+                                >
+                                    <Text style={styles.menuText}>Status privacy</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.menuOption}
+                                    onPress={() => {
+                                        setMenuVisible(false);
+                                        navigation.navigate('Settings');
+                                    }}
+                                >
+                                    <Text style={styles.menuText}>Settings</Text>
+                                </TouchableOpacity>
+                            </View>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.menuOption}
-                            onPress={() => {
-                                setMenuVisible(false);
-                                navigation.navigate('Settings');
-                            }}
-                        >
-                            <Text style={styles.menuText}>Settings</Text>
-                        </TouchableOpacity>
-                    </View>
-                </TouchableOpacity>
-            </Modal>
+                    </Modal>
 
-            {/* Viewer List Modal */}
-            <Modal
-                visible={viewerListVisible}
-                animationType="slide"
-                presentationStyle="pageSheet"
-                onRequestClose={() => setViewerListVisible(false)}
-            >
-                <View style={styles.viewerModalContainer}>
-                    <View style={styles.viewerModalHeader}>
-                        <Text style={styles.viewerModalTitle}>Viewed by {selectedStoryForViewers?.viewers?.length || 0}</Text>
-                        <TouchableOpacity onPress={() => setViewerListVisible(false)} style={styles.closeIcon}>
-                            <LucideX color={theme.colors.text.primary} size={24} />
-                        </TouchableOpacity>
-                    </View>
-                    <ScrollView contentContainerStyle={styles.viewerList} showsVerticalScrollIndicator={false}>
-                        {selectedStoryForViewers?.viewers?.map((viewer, index) => {
-                            const viewerUser = chats.find(c => c.participants.includes(viewer.userId));
-                            return (
-                                <View key={index} style={styles.viewerItem}>
-                                    <Image
-                                        source={{ uri: viewerUser?.avatar || `https://i.pravatar.cc/150?u=${viewer.userId}` }}
-                                        style={styles.viewerAvatar}
-                                    />
-                                    <View style={styles.viewerInfo}>
-                                        <Text style={styles.viewerName}>{viewerUser?.name || 'Unknown'}</Text>
-                                        <Text style={styles.viewerTime}>
-                                            {new Date(viewer.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </Text>
+                    {/* Viewer List Modal */}
+                    <Modal
+                        visible={viewerListVisible}
+                        animationType="slide"
+                        presentationStyle="pageSheet"
+                        onRequestClose={() => setViewerListVisible(false)}
+                    >
+                        <View style={styles.viewerModalContainer}>
+                            <View style={styles.viewerModalHeader}>
+                                <Text style={styles.viewerModalTitle}>Viewed by {selectedStoryForViewers?.viewers?.length || 0}</Text>
+                                <TouchableOpacity onPress={() => setViewerListVisible(false)} style={styles.closeIcon}>
+                                    <LucideX color={theme.colors.text.primary} size={24} />
+                                </TouchableOpacity>
+                            </View>
+                            <ScrollView contentContainerStyle={styles.viewerList} showsVerticalScrollIndicator={false}>
+                                {selectedStoryForViewers?.viewers?.map((viewer, index) => {
+                                    const viewerUser = chats.find(c => c.participants.includes(viewer.userId));
+                                    return (
+                                        <View key={index} style={styles.viewerItem}>
+                                            <Image
+                                                source={{ uri: viewerUser?.avatar || `https://i.pravatar.cc/150?u=${viewer.userId}` }}
+                                                style={styles.viewerAvatar}
+                                            />
+                                            <View style={styles.viewerInfo}>
+                                                <Text style={styles.viewerName}>{viewerUser?.name || 'Unknown'}</Text>
+                                                <Text style={styles.viewerTime}>
+                                                    {new Date(viewer.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    );
+                                })}
+                                {(!selectedStoryForViewers?.viewers || selectedStoryForViewers.viewers.length === 0) && (
+                                    <View style={styles.emptyViewers}>
+                                        <LucideEye size={48} color={theme.colors.text.tertiary} style={{ marginBottom: 16 }} />
+                                        <Text style={styles.emptyViewersText}>No views yet</Text>
                                     </View>
-                                </View>
-                            );
-                        })}
-                        {(!selectedStoryForViewers?.viewers || selectedStoryForViewers.viewers.length === 0) && (
-                            <View style={styles.emptyViewers}>
-                                <LucideEye size={48} color={theme.colors.text.tertiary} style={{ marginBottom: 16 }} />
-                                <Text style={styles.emptyViewersText}>No views yet</Text>
-                            </View>
-                        )}
-                    </ScrollView>
-                </View>
-            </Modal>
-            <FlatList
-                data={sections}
-                keyExtractor={(item, index) => item.userId || item.id || index.toString()}
-                renderItem={({ item }) => {
-                    if (item.type === 'header') {
-                        return (
-                            <View style={styles.sectionHeader}>
-                                <Text style={styles.sectionHeaderText}>{item.title}</Text>
-                            </View>
-                        );
-                    }
-                    return <StatusItem item={item} isViewed={item.isViewed} onPress={handlePressStatus} />;
-                }}
-                ListHeaderComponent={renderHeader}
-                contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + 20 }}
-                showsVerticalScrollIndicator={false}
-            />
+                                )}
+                            </ScrollView>
+                        </View>
+                    </Modal>
+
+                    <FlatList
+                        data={sections}
+                        keyExtractor={(item, index) => item.userId || item.id || index.toString()}
+                        renderItem={({ item }) => {
+                            if (item.type === 'header') {
+                                return (
+                                    <View style={styles.sectionHeader}>
+                                        <Text style={styles.sectionHeaderText}>{item.title}</Text>
+                                    </View>
+                                );
+                            }
+                            return <StatusItem item={item} isViewed={item.isViewed} onPress={handlePressStatus} />;
+                        }}
+                        ListHeaderComponent={renderHeader}
+                        contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + 20 }}
+                        showsVerticalScrollIndicator={false}
+                    />
+                </>
+            )}
         </SafeAreaView>
     );
 };

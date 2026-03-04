@@ -9,6 +9,7 @@ import {
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
+import PressableScale from '../../../components/PressableScale';
 import { theme } from '../../../theme/theme';
 
 interface MessageLongPressMenuProps {
@@ -26,6 +27,8 @@ const ACTIONS = [
     { id: 'delete', label: 'Delete', icon: LucideTrash2, destructive: true },
     { id: 'info', label: 'Info', icon: LucideInfo },
 ];
+
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 const MessageLongPressMenu: React.FC<MessageLongPressMenuProps> = ({
     visible,
@@ -54,14 +57,31 @@ const MessageLongPressMenu: React.FC<MessageLongPressMenuProps> = ({
                     entering={SlideInDown.duration(250).springify().damping(18).stiffness(200)}
                     style={styles.menuCard}
                 >
+                    {/* Reactions Bar */}
+                    <View style={styles.reactionsBar}>
+                        {REACTIONS.map((emoji) => (
+                            <PressableScale
+                                key={emoji}
+                                style={styles.reactionBtn}
+                                scaleTo={1.25}
+                                onPress={() => {
+                                    onAction(`react:${emoji}`);
+                                    onClose();
+                                }}
+                            >
+                                <Text style={styles.reactionEmoji}>{emoji}</Text>
+                            </PressableScale>
+                        ))}
+                    </View>
+                    <View style={styles.reactionsSeparator} />
                     {ACTIONS.map((action, index) => (
-                        <Pressable
+                        <PressableScale
                             key={action.id}
-                            style={({ pressed }) => [
+                            style={[
                                 styles.menuItem,
-                                pressed && styles.menuItemPressed,
                                 index < ACTIONS.length - 1 && styles.menuItemBorder,
                             ]}
+                            scaleTo={0.97}
                             onPress={() => {
                                 onAction(action.id);
                                 onClose();
@@ -79,7 +99,7 @@ const MessageLongPressMenu: React.FC<MessageLongPressMenuProps> = ({
                             >
                                 {action.label}
                             </Text>
-                        </Pressable>
+                        </PressableScale>
                     ))}
                 </Animated.View>
             </View>
@@ -131,6 +151,31 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '400',
         letterSpacing: 0.2,
+    },
+    reactionsBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+    },
+    reactionBtn: {
+        width: 42,
+        height: 42,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: 21,
+    },
+    reactionBtnPressed: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        transform: [{ scale: 1.2 }],
+    },
+    reactionEmoji: {
+        fontSize: 26,
+    },
+    reactionsSeparator: {
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        marginHorizontal: 16,
     },
 });
 

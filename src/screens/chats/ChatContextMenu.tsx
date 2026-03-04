@@ -6,6 +6,7 @@ import {
     CheckCheck,
     Eye,
     LogOut,
+    LucideIcon,
     Trash2,
     X,
 } from 'lucide-react-native';
@@ -18,6 +19,7 @@ import {
     View,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import PressableScale from '../../components/PressableScale';
 import { theme } from '../../theme/theme';
 
 interface ChatContextMenuProps {
@@ -45,16 +47,16 @@ const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
     const menuItems = isGroup
         ? [
-            { icon: Eye, label: 'View Group', onPress: onViewContact },
-            { icon: CheckCheck, label: 'Mark as Read', onPress: onMarkAsRead },
-            { icon: Trash2, label: 'Clear Chat', onPress: onClearChat },
-            { icon: LogOut, label: 'Exit Group', onPress: onExitGroup, destructive: true },
+            { icon: Eye as LucideIcon, label: 'View Group', onPress: onViewContact },
+            { icon: CheckCheck as LucideIcon, label: 'Mark as Read', onPress: onMarkAsRead },
+            { icon: Trash2 as LucideIcon, label: 'Clear Chat', onPress: onClearChat },
+            { icon: LogOut as LucideIcon, label: 'Exit Group', onPress: onExitGroup, destructive: true },
         ]
         : [
-            { icon: BookOpen, label: 'View Contact', onPress: onViewContact },
-            { icon: CheckCheck, label: 'Mark as Read', onPress: onMarkAsRead },
-            { icon: Trash2, label: 'Clear Chat', onPress: onClearChat },
-            { icon: Ban, label: 'Block', onPress: onBlock, destructive: true },
+            { icon: BookOpen as LucideIcon, label: 'View Contact', onPress: onViewContact },
+            { icon: CheckCheck as LucideIcon, label: 'Mark as Read', onPress: onMarkAsRead },
+            { icon: Trash2 as LucideIcon, label: 'Clear Chat', onPress: onClearChat },
+            { icon: Ban as LucideIcon, label: 'Block', onPress: onBlock, destructive: true },
         ];
 
     return (
@@ -72,18 +74,17 @@ const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
                                 <Text style={styles.menuTitle}>
                                     {isGroup ? 'Group Options' : 'Chat Options'}
                                 </Text>
-                                <Pressable onPress={onClose} hitSlop={12}>
-                                    <X color="rgba(255,255,255,0.5)" size={18} />
-                                </Pressable>
+                                <PressableScale onPress={onClose} hitSlop={12} scaleTo={0.8}>
+                                    <X color="rgba(255,255,255,0.4)" size={18} />
+                                </PressableScale>
                             </View>
 
                             {/* Items */}
                             {menuItems.map((item, index) => (
-                                <Pressable
+                                <PressableScale
                                     key={item.label}
-                                    style={({ pressed }) => [
+                                    style={[
                                         styles.menuItem,
-                                        pressed && styles.menuItemPressed,
                                         index === menuItems.length - 1 && styles.menuItemLast,
                                     ]}
                                     onPress={() => {
@@ -91,6 +92,7 @@ const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
                                         item.onPress();
                                         onClose();
                                     }}
+                                    scaleTo={0.96}
                                 >
                                     <item.icon
                                         size={18}
@@ -105,7 +107,7 @@ const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
                                     >
                                         {item.label}
                                     </Text>
-                                </Pressable>
+                                </PressableScale>
                             ))}
                         </View>
                     </BlurView>
@@ -118,37 +120,43 @@ const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 const styles = StyleSheet.create({
     backdrop: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     menuContainer: {
         width: 260,
-        borderRadius: 16,
+        borderRadius: 20,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
     },
     menuBlur: {
-        borderRadius: 16,
-        overflow: 'hidden',
+        borderRadius: 20,
     },
     menuInner: {
-        backgroundColor: 'rgba(30,30,30,0.75)',
-        paddingVertical: 6,
+        backgroundColor: 'rgba(25,25,25,0.85)',
+        paddingVertical: 4,
     },
     menuHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 18,
-        paddingVertical: 12,
+        paddingVertical: 14,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'rgba(255,255,255,0.08)',
     },
     menuTitle: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
-        letterSpacing: 0.3,
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
     },
     menuItem: {
         flexDirection: 'row',
@@ -158,14 +166,11 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'rgba(255,255,255,0.05)',
     },
-    menuItemPressed: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
-    },
     menuItemLast: {
         borderBottomWidth: 0,
     },
     menuItemText: {
-        color: 'rgba(255,255,255,0.85)',
+        color: '#FFFFFF',
         fontSize: 15,
         fontWeight: '500',
         marginLeft: 14,
