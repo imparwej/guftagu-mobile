@@ -8,9 +8,10 @@ import {
     LucideTrash2
 } from 'lucide-react-native';
 import React from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { updateStorage } from '../../store/slices/settingsSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -98,7 +99,7 @@ const StorageScreen = ({ navigation }: any) => {
     const renderActionItem = (icon: any, title: string, subtitle: string, onPress?: () => void, color?: string) => {
         const Icon = icon;
         return (
-            <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+            <PressableScale style={styles.settingItem} onPress={onPress} scaleTo={0.98}>
                 <View style={styles.iconContainer}>
                     <Icon color={color || theme.colors.text.secondary} size={22} />
                 </View>
@@ -106,16 +107,16 @@ const StorageScreen = ({ navigation }: any) => {
                     <Text style={styles.settingTitle}>{title}</Text>
                     <Text style={styles.settingSubtitle}>{subtitle}</Text>
                 </View>
-            </TouchableOpacity>
+            </PressableScale>
         );
     };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                     <LucideArrowLeft color={theme.colors.text.primary} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
                 <Text style={styles.headerTitle}>Storage and Data</Text>
             </View>
 
@@ -199,35 +200,37 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
     },
     sectionHeader: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
-        fontWeight: 'bold',
+        color: 'rgba(255, 255, 255, 0.4)',
+        fontSize: 12,
+        fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: 1,
+        letterSpacing: 1.2,
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 20,
     },
     sectionIntro: {
-        color: theme.colors.text.tertiary,
+        color: 'rgba(255, 255, 255, 0.4)',
         fontSize: 12,
         paddingHorizontal: 20,
         paddingBottom: 16,
         lineHeight: 18,
     },
     sectionDivider: {
-        height: 8,
+        height: 1,
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginVertical: 10,
     },
     usageContainer: {
         paddingHorizontal: 20,
         paddingBottom: 20,
     },
     usageBar: {
-        height: 20,
+        height: 12,
         flexDirection: 'row',
-        borderRadius: 10,
+        borderRadius: 6,
         overflow: 'hidden',
         marginBottom: 16,
+        backgroundColor: 'rgba(255,255,255,0.05)',
     },
     usageSegment: {
         height: '100%',
@@ -243,20 +246,21 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     colorDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         marginRight: 6,
     },
     usageLabelText: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255, 255, 255, 0.5)',
         fontSize: 12,
+        fontWeight: '500',
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 18,
     },
     iconContainer: {
         width: 40,
@@ -267,22 +271,25 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     settingTitle: {
-        color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.md,
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '500',
     },
     settingSubtitle: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.xs,
-        marginTop: 2,
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 13,
+        marginTop: 4,
     },
     footer: {
         padding: 40,
+        paddingBottom: 60,
         alignItems: 'center',
     },
     footerText: {
         color: theme.colors.error,
-        fontWeight: 'bold',
+        fontWeight: '700',
         fontSize: 14,
+        letterSpacing: 0.5,
     }
 });
 

@@ -9,11 +9,11 @@ import {
     Image,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { updateProfile } from '../../store/slices/authSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -56,13 +56,13 @@ const AvatarCreatorScreen = ({ navigation }: any) => {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                     <LucideChevronLeft color={theme.colors.text.primary} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
                 <Text style={styles.headerTitle}>Avatar Creator</Text>
-                <TouchableOpacity onPress={handleSaveAvatar} style={styles.saveButton}>
+                <PressableScale onPress={handleSaveAvatar} style={styles.saveButton}>
                     <LucideCheck color={theme.colors.success} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
             </View>
 
             <View style={styles.previewContainer}>
@@ -72,10 +72,10 @@ const AvatarCreatorScreen = ({ navigation }: any) => {
                         style={styles.avatarPreview}
                     />
                 </View>
-                <TouchableOpacity style={styles.randomizeButton} onPress={handleRandomize}>
+                <PressableScale style={styles.randomizeButton} onPress={handleRandomize} scaleTo={0.95}>
                     <LucideRefreshCw color={theme.colors.text.primary} size={20} />
                     <Text style={styles.randomizeText}>Randomize</Text>
-                </TouchableOpacity>
+                </PressableScale>
             </View>
 
             <View style={styles.optionsContainer}>
@@ -87,16 +87,19 @@ const AvatarCreatorScreen = ({ navigation }: any) => {
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.listPadding}
                     renderItem={({ item }) => (
-                        <TouchableOpacity
+                        <PressableScale
                             style={[
                                 styles.styleCard,
                                 selectedStyle.id === item.id && styles.selectedCard
                             ]}
+                            scaleTo={0.96}
                             onPress={() => setSelectedStyle(item)}
                         >
                             <Image source={{ uri: `${item.url}?seed=preview` }} style={styles.styleImage} />
-                            <Text style={styles.styleName}>{item.name}</Text>
-                        </TouchableOpacity>
+                            <Text style={[styles.styleName, selectedStyle.id === item.id && { color: '#000' }]}>
+                                {item.name}
+                            </Text>
+                        </PressableScale>
                     )}
                 />
 
@@ -108,18 +111,19 @@ const AvatarCreatorScreen = ({ navigation }: any) => {
                     keyExtractor={(item) => item}
                     contentContainerStyle={styles.listPadding}
                     renderItem={({ item }) => (
-                        <TouchableOpacity
+                        <PressableScale
                             style={[
                                 styles.colorCircle,
                                 { backgroundColor: item },
                                 selectedColor === item && styles.selectedColorCircle
                             ]}
+                            scaleTo={1.15}
                             onPress={() => setSelectedColor(item)}
                         >
                             {selectedColor === item && (
-                                <LucideCheck color="#fff" size={16} />
+                                <LucideCheck color={item === '#FFFFFF' ? '#000' : '#fff'} size={16} />
                             )}
-                        </TouchableOpacity>
+                        </PressableScale>
                     )}
                 />
             </View>
@@ -160,67 +164,83 @@ const styles = StyleSheet.create({
     },
     previewContainer: {
         alignItems: 'center',
-        paddingVertical: 40,
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        paddingVertical: 30,
+        backgroundColor: '#1C1C1E',
+        marginHorizontal: 16,
+        marginTop: 16,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 10,
     },
     avatarBackdrop: {
-        width: 180,
-        height: 180,
-        borderRadius: 90,
+        width: 160,
+        height: 160,
+        borderRadius: 80,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     avatarPreview: {
-        width: 160,
-        height: 160,
+        width: 140,
+        height: 140,
     },
     randomizeButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: theme.colors.card,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: theme.colors.border,
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     randomizeText: {
-        color: theme.colors.text.primary,
+        color: '#FFFFFF',
         marginLeft: 8,
-        fontSize: theme.typography.sizes.sm,
-        fontWeight: '500',
+        fontSize: 14,
+        fontWeight: '600',
     },
     optionsContainer: {
         flex: 1,
-        paddingTop: 24,
+        paddingTop: 30,
     },
     sectionTitle: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
-        fontWeight: 'bold',
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginLeft: 20,
+        letterSpacing: 1.5,
+        marginLeft: 24,
         marginBottom: 16,
     },
     listPadding: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
     },
     styleCard: {
-        width: 100,
-        height: 120,
-        backgroundColor: theme.colors.card,
-        borderRadius: 16,
-        marginHorizontal: 4,
+        width: 110,
+        height: 130,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 20,
+        marginHorizontal: 6,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: 'transparent',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
     },
     selectedCard: {
-        borderColor: theme.colors.active,
-        backgroundColor: 'rgba(0, 122, 255, 0.1)',
+        borderColor: '#FFFFFF',
+        backgroundColor: '#FFFFFF',
+        shadowColor: '#FFF',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
     },
     styleImage: {
         width: 70,
@@ -228,31 +248,37 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     styleName: {
-        color: theme.colors.text.primary,
+        color: 'rgba(255,255,255,0.8)',
         fontSize: 12,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     colorCircle: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         marginHorizontal: 6,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
-        borderColor: 'transparent',
+        borderColor: 'rgba(255,255,255,0.1)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
     },
     selectedColorCircle: {
         borderColor: '#fff',
+        transform: [{ scale: 1.1 }],
     },
     footer: {
-        padding: 20,
+        padding: 30,
         alignItems: 'center',
     },
     footerText: {
-        color: theme.colors.text.tertiary,
-        fontSize: 12,
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 13,
         textAlign: 'center',
+        lineHeight: 18,
     }
 });
 

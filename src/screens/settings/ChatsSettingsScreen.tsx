@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { updateBackup, updateTheme } from '../../store/slices/settingsSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -108,7 +109,7 @@ const ChatsSettingsScreen = ({ navigation }: any) => {
     const renderActionItem = (icon: any, title: string, subtitle: string, onPress: () => void) => {
         const Icon = icon;
         return (
-            <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+            <PressableScale style={styles.settingItem} onPress={onPress} scaleTo={0.98}>
                 <View style={styles.iconContainer}>
                     <Icon color={theme.colors.text.secondary} size={22} />
                 </View>
@@ -116,17 +117,17 @@ const ChatsSettingsScreen = ({ navigation }: any) => {
                     <Text style={styles.settingTitle}>{title}</Text>
                     <Text style={styles.settingSubtitle}>{subtitle}</Text>
                 </View>
-                <LucideChevronRight color={theme.colors.text.tertiary} size={20} />
-            </TouchableOpacity>
+                <LucideChevronRight color={theme.colors.text.tertiary} size={18} />
+            </PressableScale>
         );
     };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                     <LucideArrowLeft color={theme.colors.text.primary} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
                 <Text style={styles.headerTitle}>Chats</Text>
             </View>
 
@@ -171,13 +172,13 @@ const ChatsSettingsScreen = ({ navigation }: any) => {
                 <View style={styles.modalOverlay}>
                     <SafeAreaView style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <TouchableOpacity onPress={() => setShowWallpaperModal(false)}>
+                            <PressableScale onPress={() => setShowWallpaperModal(false)}>
                                 <LucideArrowLeft color={theme.colors.text.primary} size={28} />
-                            </TouchableOpacity>
+                            </PressableScale>
                             <Text style={modalStyles.modalTitle}>Wallpaper Preview</Text>
-                            <TouchableOpacity onPress={handleApplyTheme}>
+                            <PressableScale onPress={handleApplyTheme}>
                                 <LucideCheck color={theme.colors.success} size={28} />
-                            </TouchableOpacity>
+                            </PressableScale>
                         </View>
 
                         <View style={modalStyles.previewArea}>
@@ -200,19 +201,20 @@ const ChatsSettingsScreen = ({ navigation }: any) => {
                             </View>
                             <View style={modalStyles.brightnessContainer}>
                                 {BRIGHTNESS_LEVELS.map((level) => (
-                                    <TouchableOpacity
+                                    <PressableScale
                                         key={level.label}
                                         style={[
                                             modalStyles.brightnessBtn,
                                             tempTheme.brightness === level.value && modalStyles.activeBrightnessBtn
                                         ]}
+                                        scaleTo={0.95}
                                         onPress={() => setTempTheme({ ...tempTheme, brightness: level.value })}
                                     >
                                         <Text style={[
                                             modalStyles.brightnessText,
                                             tempTheme.brightness === level.value && modalStyles.activeBrightnessText
                                         ]}>{level.label}</Text>
-                                    </TouchableOpacity>
+                                    </PressableScale>
                                 ))}
                             </View>
 
@@ -222,12 +224,13 @@ const ChatsSettingsScreen = ({ navigation }: any) => {
                                 data={WALLPAPERS}
                                 keyExtractor={(item) => item.id}
                                 renderItem={({ item }) => (
-                                    <TouchableOpacity
+                                    <PressableScale
                                         style={[
                                             modalStyles.styleThumb,
                                             item.type === 'solid' ? { backgroundColor: item.color } : {},
                                             tempTheme.value === (item.type === 'solid' ? item.color : item.url) && modalStyles.selectedThumb
                                         ]}
+                                        scaleTo={1.1}
                                         onPress={() => setTempTheme({
                                             ...tempTheme,
                                             type: item.type as any,
@@ -237,7 +240,7 @@ const ChatsSettingsScreen = ({ navigation }: any) => {
                                         {item.type === 'nature' && (
                                             <Image source={{ uri: item.url }} style={modalStyles.thumbImage} />
                                         )}
-                                    </TouchableOpacity>
+                                    </PressableScale>
                                 )}
                             />
                         </View>
@@ -256,11 +259,18 @@ const modalStyles = StyleSheet.create({
     },
     previewArea: {
         flex: 1,
-        margin: 20,
-        borderRadius: 24,
+        margin: 16,
+        borderRadius: 32,
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.4,
+        shadowRadius: 20,
+        elevation: 10,
     },
     wallpaperPreview: {
         ...StyleSheet.absoluteFillObject,
@@ -270,57 +280,68 @@ const modalStyles = StyleSheet.create({
         backgroundColor: '#000',
     },
     chatBubbleMock: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        padding: 16,
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
         borderRadius: 20,
-        maxWidth: '80%',
+        maxWidth: '75%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
     },
     bubbleText: {
-        color: '#fff',
+        color: '#000',
         fontSize: 16,
+        fontWeight: '500',
     },
     controlsArea: {
-        padding: 20,
+        padding: 24,
+        paddingBottom: 40,
     },
     controlLabel: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255,255,255,0.5)',
         marginBottom: 10,
-        fontSize: 14,
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     brightnessContainer: {
         flexDirection: 'row',
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 4,
     },
     brightnessBtn: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 12,
         alignItems: 'center',
-        borderRadius: 8,
+        borderRadius: 12,
     },
     activeBrightnessBtn: {
-        backgroundColor: theme.colors.accent,
+        backgroundColor: '#FFFFFF',
     },
     brightnessText: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255,255,255,0.6)',
         fontSize: 13,
+        fontWeight: '600',
     },
     activeBrightnessText: {
-        color: theme.colors.text.inverse,
-        fontWeight: 'bold',
+        color: '#000',
+        fontWeight: '700',
     },
     styleThumb: {
-        width: 60,
-        height: 60,
-        borderRadius: 12,
+        width: 64,
+        height: 80,
+        borderRadius: 16,
         marginRight: 12,
         overflow: 'hidden',
         borderWidth: 2,
-        borderColor: 'transparent',
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     selectedThumb: {
-        borderColor: theme.colors.accent,
+        borderColor: '#FFFFFF',
     },
     thumbImage: {
         width: '100%',
@@ -397,7 +418,16 @@ const styles = StyleSheet.create({
     },
     modalContent: {
         flex: 1,
-    }
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
+    },
 });
 
 export default ChatsSettingsScreen;

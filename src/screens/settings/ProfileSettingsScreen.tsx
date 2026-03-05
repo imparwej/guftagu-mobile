@@ -17,11 +17,11 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { updateProfile } from '../../store/slices/authSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -77,13 +77,13 @@ const ProfileSettingsScreen = ({ navigation }: any) => {
                         <Text style={styles.fieldLabel}>{label}</Text>
                     </View>
                     {!isEditing ? (
-                        <TouchableOpacity onPress={() => setIsEditing(true)}>
+                        <PressableScale onPress={() => setIsEditing(true)}>
                             <LucidePencil color={theme.colors.accent} size={18} />
-                        </TouchableOpacity>
+                        </PressableScale>
                     ) : (
-                        <TouchableOpacity onPress={() => handleSaveProfile(field, tempValue)}>
-                            <LucideCheck color={theme.colors.success} size={20} />
-                        </TouchableOpacity>
+                        <PressableScale onPress={() => handleSaveProfile(field, tempValue)}>
+                            <LucideCheck color={theme.colors.success} size={22} />
+                        </PressableScale>
                     )}
                 </View>
 
@@ -111,23 +111,25 @@ const ProfileSettingsScreen = ({ navigation }: any) => {
                 style={{ flex: 1 }}
             >
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                         <LucideChevronLeft color={theme.colors.text.primary} size={28} />
-                    </TouchableOpacity>
+                    </PressableScale>
                     <Text style={styles.headerTitle}>Profile</Text>
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent}>
-                    <View style={styles.avatarContainer}>
-                        <TouchableOpacity onPress={handleImageUpdate} activeOpacity={0.8}>
-                            <Image
-                                source={{ uri: user?.avatar || 'https://i.pravatar.cc/150?u=me' }}
-                                style={styles.avatar}
-                            />
-                            <View style={styles.cameraIconBadge}>
-                                <LucideCamera color="#fff" size={20} />
+                    <View style={styles.avatarWrapper}>
+                        <PressableScale onPress={handleImageUpdate} scaleTo={0.97}>
+                            <View style={styles.avatarBorder}>
+                                <Image
+                                    source={{ uri: user?.avatar || 'https://i.pravatar.cc/150?u=me' }}
+                                    style={styles.avatar}
+                                />
+                                <View style={styles.cameraIconBadge}>
+                                    <LucideCamera color="#fff" size={20} />
+                                </View>
                             </View>
-                        </TouchableOpacity>
+                        </PressableScale>
                     </View>
 
                     <View style={styles.infoBox}>
@@ -203,9 +205,16 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: 40,
     },
-    avatarContainer: {
+    avatarWrapper: {
         alignItems: 'center',
-        marginVertical: theme.spacing.xxl,
+        marginVertical: 40,
+    },
+    avatarBorder: {
+        padding: 4,
+        borderRadius: 80,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(255,255,255,0.03)',
     },
     avatar: {
         width: 150,
@@ -216,65 +225,73 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 5,
         right: 5,
-        backgroundColor: theme.colors.active,
+        backgroundColor: '#FFFFFF',
         width: 44,
         height: 44,
         borderRadius: 22,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 4,
-        borderColor: theme.colors.background,
+        borderColor: '#000',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
     },
     infoBox: {
-        paddingHorizontal: theme.spacing.xl,
-        marginBottom: theme.spacing.xl,
+        paddingHorizontal: 30,
+        marginBottom: 30,
     },
     infoText: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 13,
         textAlign: 'center',
         lineHeight: 20,
     },
     fieldContainer: {
-        paddingHorizontal: theme.spacing.xl,
-        paddingVertical: theme.spacing.md,
+        paddingHorizontal: 24,
+        paddingVertical: 16,
     },
     fieldHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 12,
     },
     labelContainer: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     fieldLabel: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
         marginLeft: 12,
     },
     fieldValue: {
-        color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.lg,
+        color: '#FFFFFF',
+        fontSize: 17,
         paddingLeft: 32,
+        fontWeight: '500',
     },
     fieldInput: {
-        color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.lg,
+        color: '#FFFFFF',
+        fontSize: 17,
         paddingLeft: 32,
-        paddingVertical: 4,
+        paddingVertical: 8,
         borderBottomWidth: 1,
-        borderBottomColor: theme.colors.active,
+        borderBottomColor: '#FFFFFF',
     },
     multilineInput: {
-        minHeight: 80,
+        minHeight: 100,
         textAlignVertical: 'top',
     },
     divider: {
         height: 1,
-        backgroundColor: theme.colors.border,
-        marginLeft: 60,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        marginLeft: 56,
     },
 });
 

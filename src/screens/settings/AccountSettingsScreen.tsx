@@ -15,11 +15,11 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TouchableOpacity,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { logout, updateProfile } from '../../store/slices/authSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -67,8 +67,8 @@ const AccountSettingsScreen = ({ navigation }: any) => {
         );
     };
 
-    const renderAccountItem = (Icon: any, title: string, subtitle: string, onPress: () => void, color: string = theme.colors.text.secondary) => (
-        <TouchableOpacity style={styles.item} onPress={onPress}>
+    const renderAccountItem = (Icon: any, title: string, subtitle: string, onPress: () => void, color: string = 'rgba(255,255,255,0.7)') => (
+        <PressableScale style={styles.item} onPress={onPress} scaleTo={0.98}>
             <View style={styles.iconContainer}>
                 <Icon color={color} size={22} />
             </View>
@@ -76,16 +76,16 @@ const AccountSettingsScreen = ({ navigation }: any) => {
                 <Text style={styles.itemTitle}>{title}</Text>
                 <Text style={styles.itemSubtitle}>{subtitle}</Text>
             </View>
-            <LucideChevronRight color={theme.colors.text.tertiary} size={20} />
-        </TouchableOpacity>
+            <LucideChevronRight color={theme.colors.text.tertiary} size={18} />
+        </PressableScale>
     );
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                     <LucideChevronLeft color={theme.colors.text.primary} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
                 <Text style={styles.headerTitle}>Account</Text>
             </View>
 
@@ -190,44 +190,47 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
     },
     sectionDivider: {
-        height: 12,
+        height: 1,
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        marginVertical: theme.spacing.sm,
+        marginVertical: 10,
     },
     item: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: theme.spacing.xl,
-        paddingVertical: theme.spacing.lg,
+        paddingHorizontal: 20,
+        paddingVertical: 18,
     },
     iconContainer: {
         width: 40,
         alignItems: 'center',
-        marginRight: theme.spacing.md,
+        marginRight: 12,
     },
     itemInfo: {
         flex: 1,
     },
     itemTitle: {
-        color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.md,
+        color: '#FFFFFF',
+        fontSize: 16,
         fontWeight: '500',
     },
     itemSubtitle: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.xs,
-        marginTop: 2,
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 13,
+        marginTop: 4,
     },
     loadingOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.7)',
+        backgroundColor: 'rgba(0,0,0,0.85)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 1000,
     },
     loadingText: {
-        color: '#fff',
-        marginTop: 12,
-        fontSize: theme.typography.sizes.sm,
+        color: '#FFFFFF',
+        marginTop: 16,
+        fontSize: 15,
+        fontWeight: '600',
+        letterSpacing: 0.5,
     }
 });
 

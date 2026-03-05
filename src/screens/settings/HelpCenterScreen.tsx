@@ -19,11 +19,11 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
     UIManager,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PressableScale from '../../components/PressableScale';
 import { theme } from '../../theme/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -88,9 +88,9 @@ const HelpCenterScreen = ({ navigation }: any) => {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                     <LucideArrowLeft color={theme.colors.text.primary} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
                 <Text style={styles.headerTitle}>Help Center</Text>
             </View>
 
@@ -115,9 +115,10 @@ const HelpCenterScreen = ({ navigation }: any) => {
                         const Icon = topic.icon;
                         return (
                             <View key={topic.id} style={styles.topicCard}>
-                                <TouchableOpacity
+                                <PressableScale
                                     style={styles.topicHeader}
                                     onPress={() => toggleExpand(topic.id)}
+                                    scaleTo={0.99}
                                 >
                                     <View style={styles.topicTitleContainer}>
                                         <View style={styles.iconCircle}>
@@ -130,7 +131,7 @@ const HelpCenterScreen = ({ navigation }: any) => {
                                     ) : (
                                         <LucideChevronDown color={theme.colors.text.tertiary} size={20} />
                                     )}
-                                </TouchableOpacity>
+                                </PressableScale>
                                 {isExpanded && (
                                     <View style={styles.topicContent}>
                                         <Text style={styles.topicText}>{topic.content}</Text>
@@ -145,7 +146,7 @@ const HelpCenterScreen = ({ navigation }: any) => {
 
                 <View style={styles.section}>
                     <Text style={styles.sectionHeader}>Support</Text>
-                    <TouchableOpacity style={styles.actionItem} onPress={handleContactUs}>
+                    <PressableScale style={styles.actionItem} onPress={handleContactUs} scaleTo={0.98}>
                         <View style={styles.actionIcon}>
                             <LucideMail color={theme.colors.text.primary} size={20} />
                         </View>
@@ -153,10 +154,10 @@ const HelpCenterScreen = ({ navigation }: any) => {
                             <Text style={styles.actionTitle}>Contact us</Text>
                             <Text style={styles.actionSubtitle}>Questions? Need help?</Text>
                         </View>
-                        <LucideChevronRight color={theme.colors.text.tertiary} size={20} />
-                    </TouchableOpacity>
+                        <LucideChevronRight color={theme.colors.text.tertiary} size={18} />
+                    </PressableScale>
 
-                    <TouchableOpacity style={styles.actionItem}>
+                    <PressableScale style={styles.actionItem} scaleTo={0.98}>
                         <View style={styles.actionIcon}>
                             <LucideInfo color={theme.colors.text.primary} size={20} />
                         </View>
@@ -164,7 +165,7 @@ const HelpCenterScreen = ({ navigation }: any) => {
                             <Text style={styles.actionTitle}>App info</Text>
                             <Text style={styles.actionSubtitle}>Version 1.0.0 (Production)</Text>
                         </View>
-                    </TouchableOpacity>
+                    </PressableScale>
                 </View>
 
                 <View style={styles.footer}>
@@ -222,24 +223,27 @@ const styles = StyleSheet.create({
         paddingBottom: 20,
     },
     sectionHeader: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
-        fontWeight: 'bold',
+        color: 'rgba(255, 255, 255, 0.4)',
+        fontSize: 12,
+        fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: 1,
+        letterSpacing: 1.2,
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 20,
     },
     sectionDivider: {
-        height: 8,
+        height: 1,
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginVertical: 10,
     },
     topicCard: {
         marginHorizontal: 16,
-        marginBottom: 8,
-        backgroundColor: 'rgba(255,255,255,0.02)',
-        borderRadius: 16,
+        marginBottom: 12,
+        backgroundColor: '#1C1C1E',
+        borderRadius: 20,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
     },
     topicHeader: {
         flexDirection: 'row',
@@ -252,34 +256,34 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     iconCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(0, 122, 255, 0.1)',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
     },
     topicTitle: {
-        color: theme.colors.text.primary,
+        color: '#FFFFFF',
         fontSize: 15,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     topicContent: {
         paddingHorizontal: 16,
-        paddingBottom: 16,
-        paddingLeft: 60,
+        paddingBottom: 20,
+        paddingLeft: 64,
     },
     topicText: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255, 255, 255, 0.5)',
         fontSize: 14,
-        lineHeight: 20,
+        lineHeight: 22,
     },
     actionItem: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 18,
     },
     actionIcon: {
         width: 40,
@@ -290,22 +294,26 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     actionTitle: {
-        color: theme.colors.text.primary,
+        color: '#FFFFFF',
         fontSize: 16,
+        fontWeight: '500',
     },
     actionSubtitle: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255, 255, 255, 0.5)',
         fontSize: 13,
-        marginTop: 2,
+        marginTop: 4,
     },
     footer: {
         padding: 40,
+        paddingBottom: 60,
         alignItems: 'center',
     },
     footerText: {
-        color: theme.colors.text.tertiary,
+        color: 'rgba(255, 255, 255, 0.3)',
         fontSize: 12,
+        fontWeight: '500',
         marginBottom: 4,
+        letterSpacing: 0.5,
     }
 });
 

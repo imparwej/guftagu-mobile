@@ -10,6 +10,7 @@ import React from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import PressableScale from '../../components/PressableScale';
 import { updatePrivacy } from '../../store/slices/settingsSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -36,21 +37,21 @@ const PrivacyScreen = ({ navigation }: any) => {
     };
 
     const renderActionItem = (title: string, value: string, onPress: () => void) => (
-        <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+        <PressableScale style={styles.settingItem} onPress={onPress} scaleTo={0.98}>
             <View style={styles.settingInfo}>
                 <Text style={styles.settingTitle}>{title}</Text>
                 <Text style={styles.settingSubtitle}>{value}</Text>
             </View>
-            <LucideChevronRight color={theme.colors.text.tertiary} size={20} />
-        </TouchableOpacity>
+            <LucideChevronRight color={theme.colors.text.tertiary} size={18} />
+        </PressableScale>
     );
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                <PressableScale onPress={() => navigation.goBack()} style={styles.backButton}>
                     <LucideArrowLeft color={theme.colors.text.primary} size={28} />
-                </TouchableOpacity>
+                </PressableScale>
                 <Text style={styles.headerTitle}>Privacy</Text>
             </View>
 
@@ -92,7 +93,7 @@ const PrivacyScreen = ({ navigation }: any) => {
                 <View style={styles.sectionDivider} />
 
                 <View style={styles.section}>
-                    <TouchableOpacity style={styles.settingItem}>
+                    <PressableScale style={styles.settingItem} scaleTo={0.98}>
                         <View style={styles.iconContainer}>
                             <LucideShield color={theme.colors.text.secondary} size={20} />
                         </View>
@@ -100,9 +101,9 @@ const PrivacyScreen = ({ navigation }: any) => {
                             <Text style={styles.settingTitle}>Groups</Text>
                             <Text style={styles.settingSubtitle}>{privacy.groups}</Text>
                         </View>
-                    </TouchableOpacity>
+                    </PressableScale>
 
-                    <TouchableOpacity style={styles.settingItem}>
+                    <PressableScale style={styles.settingItem} scaleTo={0.98}>
                         <View style={styles.iconContainer}>
                             <LucideUserX color={theme.colors.text.secondary} size={20} />
                         </View>
@@ -110,7 +111,7 @@ const PrivacyScreen = ({ navigation }: any) => {
                             <Text style={styles.settingTitle}>Blocked contacts</Text>
                             <Text style={styles.settingSubtitle}>{privacy.blockedContacts}</Text>
                         </View>
-                    </TouchableOpacity>
+                    </PressableScale>
 
                     <TouchableOpacity style={styles.settingItem}>
                         <View style={styles.iconContainer}>
@@ -169,23 +170,24 @@ const styles = StyleSheet.create({
         backgroundColor: theme.colors.background,
     },
     sectionHeader: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.sm,
-        fontWeight: 'bold',
+        color: 'rgba(255, 255, 255, 0.4)',
+        fontSize: 12,
+        fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: 1,
+        letterSpacing: 1.2,
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 20,
     },
     sectionDivider: {
-        height: 8,
+        height: 1,
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginVertical: 10,
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 18,
     },
     iconContainer: {
         width: 40,
@@ -196,33 +198,41 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     settingTitle: {
-        color: theme.colors.text.primary,
-        fontSize: theme.typography.sizes.md,
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '500',
     },
     settingSubtitle: {
-        color: theme.colors.text.secondary,
-        fontSize: theme.typography.sizes.xs,
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 13,
         marginTop: 4,
         lineHeight: 18,
     },
     footer: {
         padding: 20,
-        paddingBottom: 40,
+        paddingBottom: 60,
     },
     safetyCard: {
-        backgroundColor: 'rgba(0, 122, 255, 0.05)',
-        padding: 20,
-        borderRadius: 20,
+        backgroundColor: '#1C1C1E',
+        padding: 24,
+        borderRadius: 24,
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        elevation: 5,
     },
     safetyTitle: {
-        color: theme.colors.text.primary,
-        fontSize: 16,
-        fontWeight: 'bold',
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '700',
         marginBottom: 8,
     },
     safetyText: {
-        color: theme.colors.text.secondary,
+        color: 'rgba(255, 255, 255, 0.4)',
         fontSize: 13,
         textAlign: 'center',
         lineHeight: 20,
