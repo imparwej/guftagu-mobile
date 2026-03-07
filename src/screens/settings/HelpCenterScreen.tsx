@@ -14,21 +14,16 @@ import React, { useState } from 'react';
 import {
     Alert,
     LayoutAnimation,
-    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
-    UIManager,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PressableScale from '../../components/PressableScale';
 import { theme } from '../../theme/theme';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const HELP_TOPICS = [
     {

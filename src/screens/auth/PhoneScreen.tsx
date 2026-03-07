@@ -17,7 +17,7 @@ import {
     Text,
     TextInput,
     TouchableWithoutFeedback,
-    View,
+    View
 } from 'react-native';
 import Animated, {
     Easing,
@@ -34,14 +34,15 @@ import { useDispatch } from 'react-redux';
 import PressableScale from '../../components/PressableScale';
 import { setPhoneNumber } from '../../store/slices/authSlice';
 
+import { sendOtp } from '../../api/api';
+
 // Official Guftagu SVG logo
 import GuftaguLogo from '../../../assets/images/favicon.svg';
 
 const { width, height } = Dimensions.get('window');
 
-// ─── Country Code Data ────────────────────────────────────────────────────────
-const COUNTRY_CODE = '+91';
-const COUNTRY_FLAG = '🇮🇳';
+const COUNTRY_CODE = "+91";
+const COUNTRY_FLAG = "🇮🇳";
 
 // ─── Ambient Aura (same as Welcome screen) ────────────────────────────────────
 const AmbientAura = () => {
@@ -76,15 +77,16 @@ const AmbientAura = () => {
 };
 
 // ─── Phone Number Screen ──────────────────────────────────────────────────────
-const PhoneNumberScreen = ({ navigation }: any) => {
+const PhoneScreen = ({ navigation }: any) => {
     const dispatch = useDispatch();
     const insets = useSafeAreaInsets();
     const inputRef = useRef<TextInput>(null);
 
     const [phone, setPhone] = useState('');
     const [isFocused, setIsFocused] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const isValid = phone.length >= 10;
+    const isValid = phone.length === 10;
 
     // ── Staggered entrance animations
     const logoOp = useSharedValue(0);
@@ -165,11 +167,24 @@ const PhoneNumberScreen = ({ navigation }: any) => {
         opacity: trustOp.value * 0.35,
     }));
 
-    const handleContinue = () => {
-        if (isValid) {
+    const handleContinue = async () => {
+        if (isValid && !isLoading) {
             Keyboard.dismiss();
-            dispatch(setPhoneNumber(phone));
-            navigation.navigate('OTP');
+            setIsLoading(true);
+            try {
+                const fullPhone = `${COUNTRY_CODE}${phone}`;
+                console.log("Phone:", phone);
+                console.log("Full Phone Sending:", fullPhone);
+
+                const response = await sendOtp(fullPhone);
+                console.log("SEND OTP RESPONSE:", response);
+                dispatch(setPhoneNumber(fullPhone));
+                navigation.navigate('Otp');
+            } catch (error) {
+                console.error("SEND OTP ERROR:", error);
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -207,7 +222,7 @@ const PhoneNumberScreen = ({ navigation }: any) => {
 
                         <Animated.View style={[styles.inputRow, inputStyle]}>
                             <Animated.View style={[styles.inputContainer, inputGlowStyle]}>
-                                {/* Country code selector */}
+                                {/* Country flag & code display */}
                                 <View style={styles.countrySection}>
                                     <Text style={styles.countryFlag}>{COUNTRY_FLAG}</Text>
                                     <Text style={styles.countryCode}>{COUNTRY_CODE}</Text>
@@ -222,8 +237,13 @@ const PhoneNumberScreen = ({ navigation }: any) => {
                                     placeholderTextColor="rgba(255,255,255,0.2)"
                                     keyboardType="phone-pad"
                                     value={phone}
-                                    onChangeText={setPhone}
+                                    onChangeText={(text) => {
+                                        const cleaned = text.replace(/[^0-9]/g, '');
+                                        setPhone(cleaned);
+                                    }}
                                     maxLength={10}
+                                    autoComplete="tel"
+                                    textContentType="telephoneNumber"
                                     onFocus={() => setIsFocused(true)}
                                     onBlur={() => setIsFocused(false)}
                                     selectionColor="rgba(255,255,255,0.5)"
@@ -245,7 +265,7 @@ const PhoneNumberScreen = ({ navigation }: any) => {
                                 disabled={!isValid}
                             >
                                 <Text style={[styles.ctaLabel, !isValid && styles.ctaLabelDisabled]}>
-                                    Continue
+                                    {isLoading ? 'Sending...' : 'Continue'}
                                 </Text>
                                 <View style={[styles.ctaCircle, !isValid && styles.ctaCircleDisabled]}>
                                     <Text style={styles.ctaArrow}>→</Text>
@@ -486,4 +506,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default PhoneNumberScreen;
+export default PhoneScreen;

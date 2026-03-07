@@ -39,6 +39,8 @@ import PressableScale from '../../components/PressableScale';
 import { loginSuccess, setProfileCompleted } from '../../store/slices/authSlice';
 import { RootState } from '../../store/store';
 
+import { createProfile } from '../../api/api';
+
 import GuftaguLogo from '../../../assets/images/favicon.svg';
 
 const { width, height } = Dimensions.get('window');
@@ -77,7 +79,7 @@ const AmbientAura = () => {
 };
 
 // ─── Profile Setup Screen ─────────────────────────────────────────────────────
-const ProfileSetupScreen = ({ navigation }: any) => {
+const CreateProfileScreen = ({ navigation }: any) => {
     const dispatch = useDispatch();
     const insets = useSafeAreaInsets();
     const { phoneNumber } = useSelector((state: RootState) => state.auth);
@@ -183,7 +185,7 @@ const ProfileSetupScreen = ({ navigation }: any) => {
     };
 
     // ── Continue handler
-    const handleContinue = () => {
+    const handleContinue = async () => {
         if (!isValid) {
             setShowError(true);
             return;
@@ -192,7 +194,14 @@ const ProfileSetupScreen = ({ navigation }: any) => {
         setIsLoading(true);
         Keyboard.dismiss();
 
-        setTimeout(() => {
+        try {
+            await createProfile({
+                phoneNumber: phoneNumber!,
+                name: name.trim(),
+                bio: about.trim() || 'Hey there! I am using Guftagu.',
+                profileImage: avatar || '',
+            });
+
             dispatch(loginSuccess({
                 id: Math.random().toString(36).substr(2, 9),
                 name: name.trim(),
@@ -201,9 +210,11 @@ const ProfileSetupScreen = ({ navigation }: any) => {
                 status: about.trim() || 'Hey there! I am using Guftagu.',
             }));
             dispatch(setProfileCompleted(true));
-            // Navigation is handled automatically by RootNavigator's
-            // conditional rendering based on Redux auth state.
-        }, 1000);
+
+        } catch (error) {
+            console.error("CREATE PROFILE ERROR:", error);
+            setIsLoading(false);
+        }
     };
 
     // ── Name validation
@@ -724,4 +735,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default ProfileSetupScreen;
+export default CreateProfileScreen;

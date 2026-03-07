@@ -16,13 +16,11 @@ import React, { useMemo, useState } from 'react';
 import {
     FlatList,
     LayoutAnimation,
-    Platform,
     Share,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    UIManager,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,9 +29,6 @@ import PressableScale from '../../components/PressableScale';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const SETTINGS_ITEMS = [
     {

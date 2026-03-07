@@ -34,6 +34,8 @@ import PressableScale from '../../components/PressableScale';
 import { setOtpVerified } from '../../store/slices/authSlice';
 import { RootState } from '../../store/store';
 
+import { sendOtp, verifyOtp } from '../../api/api';
+
 import GuftaguLogo from '../../../assets/images/favicon.svg';
 
 const { width, height } = Dimensions.get('window');
@@ -236,7 +238,7 @@ const VerifyingDots = () => {
 };
 
 // ─── OTP Screen ───────────────────────────────────────────────────────────────
-const OTPScreen = ({ navigation }: any) => {
+const OtpScreen = ({ navigation }: any) => {
     const dispatch = useDispatch();
     const insets = useSafeAreaInsets();
     const { phoneNumber } = useSelector((state: RootState) => state.auth);
@@ -296,59 +298,46 @@ const OTPScreen = ({ navigation }: any) => {
         return () => clearTimeout(t);
     }, [resendTimer]);
 
-    // ── Handle individual digit entry
     const handleDigitChange = useCallback((text: string, index: number) => {
+
         if (isVerifying || isSuccess) return;
 
-        const digit = text.replace(/[^0-9]/g, '');
+        const digit = text.replace(/[^0-9]/g, "");
 
-        if (digit.length === 0) {
-            // Clearing current cell
+        if (!digit) {
             setDigits((prev) => {
                 const next = [...prev];
-                next[index] = '';
+                next[index] = "";
                 return next;
             });
             return;
         }
 
-        // Handle paste — distribute digits across cells
-        if (digit.length > 1) {
-            const chars = digit.slice(0, OTP_LENGTH).split('');
-            setDigits((prev) => {
-                const next = [...prev];
-                chars.forEach((c, i) => {
-                    if (index + i < OTP_LENGTH) next[index + i] = c;
-                });
-                return next;
-            });
-            const targetIndex = Math.min(index + chars.length, OTP_LENGTH - 1);
-            setActiveIndex(targetIndex);
-            setTimeout(() => inputRefs.current[targetIndex]?.focus(), 30);
-
-            // Check auto-submit
-            if (index + chars.length >= OTP_LENGTH) {
-                setTimeout(() => triggerAutoSubmit(), 100);
-            }
-            return;
-        }
-
-        // Single digit entered
         setDigits((prev) => {
+
             const next = [...prev];
             next[index] = digit[0];
+
+            const otp = next.join("");
+
+            // move focus
+            if (index < OTP_LENGTH - 1) {
+                setActiveIndex(index + 1);
+                setTimeout(() => inputRefs.current[index + 1]?.focus(), 30);
+            } else {
+                setActiveIndex(index);
+            }
+
+            // auto verify
+            if (otp.length === 6) {
+                setTimeout(() => {
+                    handleVerify(otp);
+                }, 200);
+            }
+
             return next;
         });
 
-        if (index < OTP_LENGTH - 1) {
-            // Move to next cell
-            setActiveIndex(index + 1);
-            setTimeout(() => inputRefs.current[index + 1]?.focus(), 30);
-        } else {
-            // Last cell filled — auto-submit
-            setActiveIndex(index);
-            setTimeout(() => triggerAutoSubmit(), 100);
-        }
     }, [isVerifying, isSuccess]);
 
     // ── Handle backspace
@@ -374,47 +363,87 @@ const OTPScreen = ({ navigation }: any) => {
         }
     }, [digits]);
 
-    // ── Auto-submit check
-    const triggerAutoSubmit = useCallback(() => {
-        setDigits((current) => {
-            const allFilled = current.every((d) => d !== '');
-            if (allFilled) {
-                Keyboard.dismiss();
-                handleVerify();
-            }
-            return current;
-        });
-    }, []);
-
     // ── Verify
-    const handleVerify = () => {
+    const handleVerify = async (otpParam?: string) => {
         if (isVerifying || isSuccess) return;
         Keyboard.dismiss();
         setIsVerifying(true);
 
-        setTimeout(() => {
+        const otp = otpParam ?? digits.join("");
+        console.log("Digits:", digits);
+        console.log("OTP:", digits.join(""));
+
+        if (otp.length !== 6) {
+            alert("Please enter full 6 digit OTP");
             setIsVerifying(false);
-            setIsSuccess(true);
+            return;
+        }
 
-            successOp.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) });
-            successScale.value = withSpring(1, { damping: 12, stiffness: 100 });
+        console.log("OTP Sending:", otp);
 
-            setTimeout(() => {
-                dispatch(setOtpVerified(true));
-                navigation.navigate('ProfileSetup');
-            }, 1200);
-        }, 1500);
+        try {
+            const response = await verifyOtp(phoneNumber!, otp);
+            console.log("VERIFY RESPONSE:", response);
+
+            setIsVerifying(false);
+
+            if (response.status === "INVALID_OTP") {
+                alert("Incorrect OTP");
+                shakeX.value = withSequence(
+                    withTiming(-10, { duration: 50 }),
+                    withRepeat(withTiming(10, { duration: 50 }), 3, true),
+                    withTiming(0, { duration: 50 })
+                );
+                return;
+            }
+
+            if (response.status === "OTP_EXPIRED") {
+                alert("OTP expired. Please resend.");
+                return;
+            }
+
+            if (response.status === "LOGIN_SUCCESS" || response.status === "VERIFIED") {
+                setIsSuccess(true);
+
+                successOp.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) });
+                successScale.value = withSpring(1, { damping: 12, stiffness: 100 });
+
+                setTimeout(() => {
+                    dispatch(setOtpVerified(true));
+
+                    if (response.status === "LOGIN_SUCCESS") {
+                        navigation.replace("Chats");
+                    } else {
+                        navigation.replace("CreateProfile");
+                    }
+                }, 1200);
+            }
+        } catch (error) {
+            console.error("VERIFY ERROR:", error);
+            setIsVerifying(false);
+            shakeX.value = withSequence(
+                withTiming(-10, { duration: 50 }),
+                withRepeat(withTiming(10, { duration: 50 }), 3, true),
+                withTiming(0, { duration: 50 })
+            );
+        }
     };
 
     // ── Resend
-    const handleResend = useCallback(() => {
+    const handleResend = useCallback(async () => {
         if (!canResend) return;
         setCanResend(false);
         setResendTimer(RESEND_COOLDOWN);
         setDigits(Array(OTP_LENGTH).fill(''));
         setActiveIndex(0);
         setTimeout(() => inputRefs.current[0]?.focus(), 100);
-    }, [canResend]);
+
+        try {
+            await sendOtp(phoneNumber!);
+        } catch (error) {
+            console.error("RESEND ERROR:", error);
+        }
+    }, [canResend, phoneNumber]);
 
     const handleChangeNumber = () => navigation.goBack();
 
@@ -441,8 +470,8 @@ const OTPScreen = ({ navigation }: any) => {
     }));
 
     const maskedPhone = phoneNumber
-        ? `+91 ${phoneNumber.slice(0, 2)}••••${phoneNumber.slice(-2)}`
-        : '+91 ••••••••••';
+        ? `${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)}••••${phoneNumber.slice(-2)}`
+        : '••••••••••';
 
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -484,8 +513,8 @@ const OTPScreen = ({ navigation }: any) => {
                                         ref={(ref) => { inputRefs.current[i] = ref; }}
                                         style={styles.cellInput}
                                         keyboardType="number-pad"
-                                        maxLength={OTP_LENGTH}
-                                        value=""
+                                        maxLength={1}
+                                        value={digit}
                                         onChangeText={(text) => handleDigitChange(text, i)}
                                         onKeyPress={(e) => handleKeyPress(e, i)}
                                         onFocus={() => setActiveIndex(i)}
@@ -835,4 +864,4 @@ const styles = StyleSheet.create({
     },
 });
 
-export default OTPScreen;
+export default OtpScreen;

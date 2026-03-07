@@ -4,12 +4,10 @@ import {
     FlatList,
     LayoutAnimation,
     Modal,
-    Platform,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
-    UIManager,
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,11 +19,6 @@ import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Call } from '../../types';
 
-if (Platform.OS === 'android') {
-    if (UIManager.setLayoutAnimationEnabledExperimental) {
-        UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-}
 
 // Components
 import CallHistoryItem from '../../components/calls/CallHistoryItem';

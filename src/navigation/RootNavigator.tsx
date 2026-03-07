@@ -2,9 +2,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { useSelector } from 'react-redux';
 import SplashScreen from '../screens/Splash';
-import OTPScreen from '../screens/auth/OTPScreen';
-import PhoneNumberScreen from '../screens/auth/PhoneNumberScreen';
-import ProfileSetupScreen from '../screens/auth/ProfileSetupScreen';
+import CreateProfileScreen from '../screens/auth/CreateProfileScreen';
+import OtpScreen from '../screens/auth/OtpScreen';
+import PhoneScreen from '../screens/auth/PhoneScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import VideoCallScreen from '../screens/calls/VideoCallScreen';
 import VoiceCallScreen from '../screens/calls/VoiceCallScreen';
@@ -43,7 +43,7 @@ const RootNavigator = () => {
             {isFullyOnboarded ? (
                 // ── Authenticated stack — no auth screens in tree at all
                 <>
-                    <Stack.Screen name="Main" component={TabNavigator} />
+                    <Stack.Screen name="Chats" component={TabNavigator} />
                     <Stack.Screen
                         name="ContactList"
                         component={ContactListScreen}
@@ -96,17 +96,17 @@ const RootNavigator = () => {
                     />
                     <Stack.Screen
                         name="PhoneNumber"
-                        component={PhoneNumberScreen}
+                        component={PhoneScreen}
                         options={onboardingTransition}
                     />
                     <Stack.Screen
-                        name="OTP"
-                        component={OTPScreen}
+                        name="Otp"
+                        component={OtpScreen}
                         options={onboardingTransition}
                     />
                     <Stack.Screen
-                        name="ProfileSetup"
-                        component={ProfileSetupScreen}
+                        name="CreateProfile"
+                        component={CreateProfileScreen}
                         options={onboardingTransition}
                     />
                 </>

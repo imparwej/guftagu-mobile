@@ -30,7 +30,7 @@ export const createProfile = async (data: {
     phoneNumber: string;
     name: string;
     bio: string;
-    profilePicture: string;
+    profileImage: string;
 }) => {
     try {
         const response = await apiClient.post('/auth/create-profile', data);
