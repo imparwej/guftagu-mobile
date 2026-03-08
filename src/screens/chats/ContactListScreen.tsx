@@ -37,25 +37,17 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import { Contact, syncContacts } from '../../api/contactApi';
 import { setActiveChat } from '../../store/slices/chatSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
+import { User } from '../../types';
 
 /* ─── Constants ────────────────────────────────────────────────────────────── */
 const INVITE_MESSAGE =
     "🎉 Hey! I'm using Guftagu — a premium chat app. Join me! Download: https://guftagu.app/download";
 
-// Simulated Guftagu phone numbers (matched from Redux chats)
-const GUFTAGU_PHONES = new Set([
-    '+1 234 567 8901',
-    '+1 234 567 8902',
-    '+1 234 567 8904',
-    '+1 234 567 8905',
-    '+1 234 567 8907',
-    '+1 234 567 8909',
-    '+1 234 567 8910',
-]);
-
+// Removed dummy GUFTAGU_PHONES
 const CONTACT_ROW_HEIGHT = 72;
 
 /* ─── Types ────────────────────────────────────────────────────────────────── */
@@ -65,6 +57,7 @@ interface DeviceContact {
     phone: string;
     avatar?: string;
     isGuftaguUser: boolean;
+    guftaguUser?: User;
 }
 
 type ListItem =
@@ -74,55 +67,7 @@ type ListItem =
     | { type: 'contact'; data: DeviceContact };
 
 /* ─── Memoized Contact Row ─────────────────────────────────────────────────── */
-const ContactRow = React.memo(
-    ({
-        contact,
-        onPress,
-        index,
-    }: {
-        contact: DeviceContact;
-        onPress: (c: DeviceContact) => void;
-        index: number;
-    }) => (
-        <Animated.View entering={FadeInDown.delay(Math.min(index * 20, 400)).duration(250)}>
-            <Pressable
-                style={({ pressed }) => [
-                    styles.contactRow,
-                    pressed && styles.contactRowPressed,
-                ]}
-                onPress={() => onPress(contact)}
-            >
-                {contact.avatar ? (
-                    <Image source={{ uri: contact.avatar }} style={styles.contactAvatar} />
-                ) : (
-                    <View style={[styles.contactAvatar, styles.avatarPlaceholder]}>
-                        <Text style={styles.avatarInitial}>
-                            {contact.name.charAt(0).toUpperCase()}
-                        </Text>
-                    </View>
-                )}
-                <View style={styles.contactInfo}>
-                    <Text style={styles.contactName} numberOfLines={1}>
-                        {contact.name}
-                    </Text>
-                    <Text style={styles.contactPhone} numberOfLines={1}>
-                        {contact.phone}
-                    </Text>
-                </View>
-                {contact.isGuftaguUser ? (
-                    <View style={styles.guftaguBadge}>
-                        <Text style={styles.guftaguBadgeText}>on Guftagu</Text>
-                    </View>
-                ) : (
-                    <View style={styles.inviteChip}>
-                        <UserPlus size={13} color="rgba(255,255,255,0.6)" />
-                        <Text style={styles.inviteChipText}>Invite</Text>
-                    </View>
-                )}
-            </Pressable>
-        </Animated.View>
-    ),
-);
+// (ContactRow moved below styles)
 
 /* ─── Main Screen ──────────────────────────────────────────────────────────── */
 const ContactListScreen = ({ navigation }: any) => {
@@ -165,21 +110,42 @@ const ContactListScreen = ({ navigation }: any) => {
                 sort: Contacts.SortTypes.FirstName,
             });
 
+            const deviceContactsForSync: Contact[] = data
+                .filter(c => c.phoneNumbers && c.phoneNumbers.length > 0)
+                .map(c => ({
+                    name: c.name || 'Unknown',
+                    phoneNumber: c.phoneNumbers?.[0]?.number?.replace(/[^+\d]/g, '') || ''
+                }))
+                .filter(c => !!c.phoneNumber);
+
+            // Sync with backend
+            let matchedGuftaguUsers: User[] = [];
+            try {
+                const response = await syncContacts(deviceContactsForSync);
+                matchedGuftaguUsers = response.guftaguUsers;
+            } catch (error) {
+                console.error('Contact sync failed:', error);
+            }
+
             const mapped: DeviceContact[] = data
                 .filter((c) => c.phoneNumbers && c.phoneNumbers.length > 0 && c.name)
                 .map((c) => {
                     const phone = c.phoneNumbers?.[0]?.number || '';
-                    const cleanPhone = phone.replace(/[^+\d\s]/g, '').trim();
+                    const cleanPhone = phone.replace(/[^+\d]/g, '');
+                    const guftaguUser = matchedGuftaguUsers.find(u => u.phone === cleanPhone || u.phoneNumber === cleanPhone);
                     return {
                         id: c.id || String(Math.random()),
                         name: c.name || 'Unknown',
                         phone: cleanPhone,
                         avatar: c.image?.uri,
-                        isGuftaguUser: GUFTAGU_PHONES.has(cleanPhone),
+                        isGuftaguUser: !!guftaguUser,
+                        guftaguUser: guftaguUser ? {
+                            ...guftaguUser,
+                            phone: guftaguUser.phone || guftaguUser.phoneNumber || ''
+                        } : undefined
                     };
                 });
 
-            // Sort: Guftagu users first, then alphabetical
             mapped.sort((a, b) => {
                 if (a.isGuftaguUser && !b.isGuftaguUser) return -1;
                 if (!a.isGuftaguUser && b.isGuftaguUser) return 1;
@@ -187,8 +153,8 @@ const ContactListScreen = ({ navigation }: any) => {
             });
 
             setContacts(mapped);
-        } catch {
-            setContacts([]);
+        } catch (error) {
+            console.error('Failed to load contacts:', error);
         }
 
         setLoading(false);
@@ -223,17 +189,17 @@ const ContactListScreen = ({ navigation }: any) => {
         }
 
         if (filtered.length > 0) {
-            const guftaguUsers = filtered.filter((c) => c.isGuftaguUser);
-            const otherUsers = filtered.filter((c) => !c.isGuftaguUser);
+            const guftaguContacts = filtered.filter((c) => c.isGuftaguUser);
+            const otherContacts = filtered.filter((c) => !c.isGuftaguUser);
 
-            if (guftaguUsers.length > 0) {
-                items.push({ type: 'sectionHeader', title: `Contacts on Guftagu · ${guftaguUsers.length}` });
-                guftaguUsers.forEach((c) => items.push({ type: 'contact', data: c }));
+            if (guftaguContacts.length > 0) {
+                items.push({ type: 'sectionHeader', title: `Contacts on Guftagu · ${guftaguContacts.length}` });
+                guftaguContacts.forEach((c) => items.push({ type: 'contact', data: c }));
             }
 
-            if (otherUsers.length > 0) {
-                items.push({ type: 'sectionHeader', title: `Invite to Guftagu · ${otherUsers.length}` });
-                otherUsers.forEach((c) => items.push({ type: 'contact', data: c }));
+            if (otherContacts.length > 0) {
+                items.push({ type: 'sectionHeader', title: `Invite to Guftagu · ${otherContacts.length}` });
+                otherContacts.forEach((c) => items.push({ type: 'contact', data: c }));
             }
         }
 
@@ -244,17 +210,22 @@ const ContactListScreen = ({ navigation }: any) => {
     const handleContactPress = useCallback(
         async (contact: DeviceContact) => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            if (contact.isGuftaguUser) {
-                // Find matching chat in Redux
-                const matchingChat = chats.find(
-                    (c) => c.name?.toLowerCase() === contact.name.toLowerCase(),
+            if (contact.isGuftaguUser && contact.guftaguUser) {
+                // Find matching chat in Redux or create a temporary one
+                const existingChat = chats.find(
+                    (c) => c.user1Id === contact.guftaguUser?.id || c.user2Id === contact.guftaguUser?.id
                 );
-                if (matchingChat) {
-                    dispatch(setActiveChat(matchingChat.id));
-                    navigation.navigate('Chat');
+
+                if (existingChat) {
+                    dispatch(setActiveChat(existingChat.id));
                 } else {
-                    Alert.alert('Chat', `Starting chat with ${contact.name}...`);
+                    // Navigate to chat with just the other user's info
+                    // The ChatScreen should handle initiating the first message
+                    dispatch(setActiveChat(null)); // Clear active chat ID
+                    navigation.navigate('Chat', { otherUser: contact.guftaguUser });
+                    return;
                 }
+                navigation.navigate('Chat');
             } else {
                 // SMS invite
                 try {
@@ -968,5 +939,59 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
 });
+
+/* ─── Memoized Contact Row ─────────────────────────────────────────────────── */
+const ContactRow = React.memo(
+    ({
+        contact,
+        onPress,
+        index,
+    }: {
+        contact: DeviceContact;
+        onPress: (c: DeviceContact) => void;
+        index: number;
+    }) => (
+        <Animated.View entering={FadeInDown.delay(Math.min(index * 20, 400)).duration(250)}>
+            <Pressable
+                style={({ pressed }) => [
+                    styles.contactRow,
+                    pressed && styles.contactRowPressed,
+                ]}
+                onPress={() => onPress(contact)}
+            >
+                {contact.guftaguUser?.profilePicture || contact.avatar ? (
+                    <Image
+                        source={{ uri: contact.guftaguUser?.profilePicture || contact.avatar }}
+                        style={styles.contactAvatar}
+                    />
+                ) : (
+                    <View style={[styles.contactAvatar, styles.avatarPlaceholder]}>
+                        <Text style={styles.avatarInitial}>
+                            {contact.name.charAt(0).toUpperCase()}
+                        </Text>
+                    </View>
+                )}
+                <View style={styles.contactInfo}>
+                    <Text style={styles.contactName} numberOfLines={1}>
+                        {contact.name}
+                    </Text>
+                    <Text style={styles.contactPhone} numberOfLines={1}>
+                        {contact.phone}
+                    </Text>
+                </View>
+                {contact.isGuftaguUser ? (
+                    <View style={styles.guftaguBadge}>
+                        <Text style={styles.guftaguBadgeText}>Chat</Text>
+                    </View>
+                ) : (
+                    <View style={styles.inviteChip}>
+                        <UserPlus size={13} color="rgba(255,255,255,0.6)" />
+                        <Text style={styles.inviteChipText}>Invite</Text>
+                    </View>
+                )}
+            </Pressable>
+        </Animated.View>
+    ),
+);
 
 export default ContactListScreen;

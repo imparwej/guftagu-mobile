@@ -195,7 +195,7 @@ const CreateProfileScreen = ({ navigation }: any) => {
         Keyboard.dismiss();
 
         try {
-            await createProfile({
+            const response = await createProfile({
                 phoneNumber: phoneNumber!,
                 name: name.trim(),
                 bio: about.trim() || 'Hey there! I am using Guftagu.',
@@ -203,11 +203,8 @@ const CreateProfileScreen = ({ navigation }: any) => {
             });
 
             dispatch(loginSuccess({
-                id: Math.random().toString(36).substr(2, 9),
-                name: name.trim(),
-                avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name.trim())}&background=1a1a1a&color=fff&bold=true`,
-                phoneNumber: phoneNumber,
-                status: about.trim() || 'Hey there! I am using Guftagu.',
+                user: response.user,
+                token: response.token
             }));
             dispatch(setProfileCompleted(true));
 

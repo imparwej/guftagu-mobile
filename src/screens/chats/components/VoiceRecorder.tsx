@@ -1,6 +1,7 @@
+import { Audio } from 'expo-av';
 import { LucideMic, LucideTrash2, LucideX } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     FadeIn,
     FadeOut,
@@ -15,16 +16,18 @@ import { theme } from '../../../theme/theme';
 interface VoiceRecorderProps {
     visible: boolean;
     onCancel: () => void;
-    onSend: (duration: number) => void;
+    onSend: (duration: number, uri: string) => void;
 }
 
 const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ visible, onCancel, onSend }) => {
     const [seconds, setSeconds] = useState(0);
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const recordingRef = useRef<Audio.Recording | null>(null);
     const pulseScale = useSharedValue(1);
 
     useEffect(() => {
         if (visible) {
+            startRecording();
             setSeconds(0);
             timerRef.current = setInterval(() => {
                 setSeconds(s => s + 1);
@@ -38,16 +41,55 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ visible, onCancel, onSend
                 false,
             );
         } else {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
-            setSeconds(0);
+            stopRecordingCleanup();
         }
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
     }, [visible]);
+
+    const startRecording = async () => {
+        try {
+            const permission = await Audio.requestPermissionsAsync();
+            if (!permission.granted) {
+                Alert.alert('Permission needed', 'Microphone access is required to record audio.');
+                onCancel();
+                return;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+            });
+
+            const { recording } = await Audio.Recording.createAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY
+            );
+            recordingRef.current = recording;
+        } catch (err) {
+            console.error('Failed to start recording:', err);
+            onCancel();
+        }
+    };
+
+    const stopRecordingCleanup = async () => {
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+        try {
+            if (recordingRef.current) {
+                const status = await recordingRef.current.getStatusAsync();
+                if (status.isRecording) {
+                    await recordingRef.current.stopAndUnloadAsync();
+                }
+                recordingRef.current = null;
+            }
+        } catch (e) {
+            // Already stopped
+        }
+        setSeconds(0);
+    };
 
     const pulseStyle = useAnimatedStyle(() => ({
         transform: [{ scale: pulseScale.value }],
@@ -59,9 +101,35 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ visible, onCancel, onSend
         return `${min}:${sec.toString().padStart(2, '0')}`;
     };
 
-    const handleSend = useCallback(() => {
-        onSend(seconds);
-    }, [seconds, onSend]);
+    const handleSend = useCallback(async () => {
+        try {
+            if (!recordingRef.current) {
+                onCancel();
+                return;
+            }
+
+            await recordingRef.current.stopAndUnloadAsync();
+            const uri = recordingRef.current.getURI();
+            recordingRef.current = null;
+
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+
+            if (uri) {
+                onSend(seconds, uri);
+            }
+        } catch (err) {
+            console.error('Failed to stop recording:', err);
+            onCancel();
+        }
+    }, [seconds, onSend, onCancel]);
+
+    const handleCancel = useCallback(async () => {
+        await stopRecordingCleanup();
+        onCancel();
+    }, [onCancel]);
 
     if (!visible) return null;
 
@@ -74,7 +142,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ visible, onCancel, onSend
             {/* Cancel */}
             <Pressable
                 style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
-                onPress={onCancel}
+                onPress={handleCancel}
             >
                 <LucideX color={theme.colors.text.secondary} size={22} />
             </Pressable>
@@ -103,7 +171,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({ visible, onCancel, onSend
             {/* Delete */}
             <Pressable
                 style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
-                onPress={onCancel}
+                onPress={handleCancel}
             >
                 <LucideTrash2 color={theme.colors.error} size={20} />
             </Pressable>

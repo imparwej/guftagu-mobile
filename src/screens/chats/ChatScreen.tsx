@@ -1,6 +1,10 @@
+import NetInfo from '@react-native-community/netinfo';
 import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -15,22 +19,26 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import { blockUser as blockUserApi, clearChatForUser, deleteMessageApi, getLinkPreview, getMessages, markAsRead, toggleStarMessageApi, unblockUser as unblockUserApi, uploadFile } from '../../api/chatApi';
+import { API_BASE_URL } from '../../config/api';
+import { chatSocketService } from '../../socket/chatSocket';
 import {
     addMessage,
     blockChat,
-    clearChat,
     deleteMessage,
     exitGroup,
+    setActiveChat,
+    setMessages,
     setWallpaper,
     starMessage,
     toggleMute,
     toggleReaction,
-    unblockChat,
-    updateMessageStatus,
+    unblockChat
 } from '../../store/slices/chatSlice';
-import { RootState } from '../../store/store';
+import { RootState, store } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Message } from '../../types';
+import { registerShareCallback } from '../../utils/shareCallbacks';
 import AttachmentPanel from './components/AttachmentPanel';
 import ChatHeader from './components/ChatHeader';
 import ChatHeaderMenu from './components/ChatHeaderMenu';
@@ -64,12 +72,13 @@ const getSmartSuggestions = (messageText: string): string[] => {
     return ['Got it', 'Okay', 'Thanks'];
 };
 
-const ChatScreen = ({ navigation }: any) => {
+const ChatScreen = ({ navigation, route }: any) => {
+    const { otherUser } = route.params || {};
     const [text, setText] = useState('');
     const [showAttachments, setShowAttachments] = useState(false);
     const [showHeaderMenu, setShowHeaderMenu] = useState(false);
     const [longPressMessage, setLongPressMessage] = useState<Message | null>(null);
-    const [isTyping, setIsTyping] = useState(false);
+    const [isTypingRemote, setIsTypingRemote] = useState(false);
     const [showEmoji, setShowEmoji] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
@@ -78,6 +87,7 @@ const ChatScreen = ({ navigation }: any) => {
     const [highlightedMessageIds, setHighlightedMessageIds] = useState<string[]>([]);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [isOffline, setIsOffline] = useState(false);
 
     const dispatch = useDispatch();
     const { activeChatId, chats, messages } = useSelector((state: RootState) => state.chat);
@@ -85,75 +95,255 @@ const ChatScreen = ({ navigation }: any) => {
     const insets = useSafeAreaInsets();
 
     const chat = chats.find(c => c.id === activeChatId);
+
+    // Virtual chat for new conversations
+    const displayChat = chat || {
+        id: 'new',
+        name: otherUser?.name,
+        avatar: otherUser?.avatar,
+        otherUser: otherUser,
+        isGroup: false,
+    } as any;
+
     const chatMessages = activeChatId ? messages[activeChatId] || [] : [];
-    const isGroup = chat?.isGroup || chat?.type === 'group';
-    const isBlocked = chat?.isBlocked || false;
+    const isGroup = displayChat?.isGroup || false;
+    const isBlocked = displayChat?.isBlocked || false;
 
     const flatListRef = useRef<FlatList>(null);
 
-    // ──────── SEND MESSAGE ────────
-    const sendMessage = useCallback((msgOverrides: Partial<Message> = {}) => {
-        if (!activeChatId) return;
-        const senderId = currentUser?.id || 'me';
-        const newMsgId = Date.now().toString();
+    // ──────── DATA FETCHING & SOCKET ────────
+    useEffect(() => {
+        const loadMessages = async () => {
+            if (activeChatId) {
+                try {
+                    const data = await getMessages(activeChatId);
+                    dispatch(setMessages({ chatId: activeChatId, messages: data }));
+                } catch (error) {
+                    console.error('Failed to load messages:', error);
+                }
+            }
+        };
 
-        const msg: Message = {
-            id: newMsgId,
-            chatId: activeChatId,
-            senderId,
-            timestamp: new Date().toISOString(),
-            status: 'sent',
-            replyTo: replyingTo?.id,
+        loadMessages();
+
+        // Mark messages as seen when opening a chat
+        if (activeChatId && currentUser?.id) {
+            markAsRead(activeChatId, currentUser.id).catch(err =>
+                console.error('Failed to mark as read:', err)
+            );
+        }
+    }, [activeChatId, currentUser?.id, dispatch]);
+
+    // ──────── OFFLINE DETECTION ────────
+    useEffect(() => {
+        const unsubscribe = NetInfo.addEventListener(state => {
+            const offline = !(state.isConnected && state.isInternetReachable !== false);
+            setIsOffline(offline);
+            // Reconnect WebSocket when back online
+            if (!offline && currentUser?.id) {
+                chatSocketService.connect(
+                    () => console.log('Reconnected WebSocket'),
+                    (err: any) => console.error('Reconnect failed:', err)
+                );
+            }
+        });
+        return () => unsubscribe();
+    }, [currentUser?.id]);
+
+    // ──────── AUTO-SAVE RECEIVED MEDIA ────────
+    const autoSaveMedia = useCallback(async (message: Message) => {
+        if (message.senderId === currentUser?.id) return;
+        if (!message.mediaUrl) return;
+        if (message.type !== 'IMAGE' && message.type !== 'DOCUMENT') return;
+
+        try {
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status !== 'granted') return;
+
+            const fullUrl = `${API_BASE_URL}${message.mediaUrl}`;
+            const filename = message.mediaUrl.split('/').pop() || `file_${Date.now()}`;
+            const localUri = `${FileSystem.documentDirectory}${filename}`;
+
+            const downloadResult = await FileSystem.downloadAsync(fullUrl, localUri);
+            if (downloadResult.status === 200) {
+                await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
+            }
+        } catch (err) {
+            console.warn('Auto-save media failed:', err);
+        }
+    }, [currentUser?.id]);
+
+    // Subscribe to incoming messages (socket already connected from ChatListScreen)
+    useEffect(() => {
+        if (!currentUser?.id) return;
+
+        const handleIncomingMessage = (message: Message) => {
+            dispatch(addMessage(message));
+
+            // Auto-save received media
+            autoSaveMedia(message);
+
+            // If this is a new conversation (activeChatId was null), set it
+            if (!activeChatId && message.conversationId &&
+                (message.senderId === currentUser.id || message.receiverId === currentUser.id)) {
+                // Check if this message involves the otherUser we're chatting with
+                const isRelevant = otherUser?.id &&
+                    (message.senderId === otherUser.id || message.receiverId === otherUser.id);
+                if (isRelevant) {
+                    dispatch(setActiveChat(message.conversationId));
+                }
+            }
+
+            // Auto-scroll if message is for current conversation
+            const currentActiveId = activeChatId || message.conversationId;
+            if (message.conversationId === currentActiveId) {
+                setTimeout(() => {
+                    flatListRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+            }
+        };
+
+        // Subscribe (ChatListScreen may already have a sub, but ChatScreen needs its own
+        // handler for scroll and new-chat detection)
+        const messageSub = chatSocketService.subscribe('/user/queue/messages', handleIncomingMessage);
+
+        // Typing indicator
+        let typingSub: any;
+        if (activeChatId) {
+            typingSub = chatSocketService.subscribe('/user/queue/typing', (status: any) => {
+                if (status.conversationId === activeChatId && status.userId !== currentUser?.id) {
+                    setIsTypingRemote(status.typing);
+                }
+            });
+        }
+
+        return () => {
+            chatSocketService.unsubscribe('/user/queue/messages');
+            if (activeChatId) chatSocketService.unsubscribe('/user/queue/typing');
+        };
+    }, [activeChatId, currentUser?.id, dispatch, otherUser?.id]);
+
+    // ──────── SEND MESSAGE ────────
+    const sendMessage = useCallback(async (msgOverrides: Partial<Message> = {}) => {
+        if (!currentUser?.id) return;
+
+        // Resolve receiverId from multiple sources
+        let receiverId = otherUser?.id
+            || displayChat?.otherUser?.id
+            || (chat?.user1Id === currentUser?.id ? chat?.user2Id : chat?.user1Id);
+
+        if (!receiverId) {
+            console.error('Cannot send message: receiverId is null');
+            return;
+        }
+
+        const content = msgOverrides.content !== undefined ? msgOverrides.content : text.trim();
+
+        if (!content && !msgOverrides.mediaUrl && !msgOverrides.type) return;
+
+        // URL detection for link preview
+        const urlRegex = /(https?:\/\/[^\s]+)/gi;
+        const detectedUrls = content ? content.match(urlRegex) : null;
+        let finalType = msgOverrides.type || 'TEXT';
+        let metadata: Record<string, string> | undefined;
+
+        if (detectedUrls && detectedUrls.length > 0 && !msgOverrides.type) {
+            // Fetch link preview
+            try {
+                const preview = await getLinkPreview(detectedUrls[0]);
+                if (preview && (preview.title || preview.description)) {
+                    finalType = 'LINK';
+                    metadata = {
+                        url: detectedUrls[0],
+                        title: preview.title || '',
+                        description: preview.description || '',
+                        image: preview.image || '',
+                        siteName: preview.siteName || '',
+                    };
+                }
+            } catch (err) {
+                console.warn('Link preview fetch failed, sending as TEXT:', err);
+            }
+        }
+
+        const messagePayload: any = {
+            conversationId: activeChatId || '',
+            senderId: currentUser.id,
+            receiverId: receiverId,
+            type: finalType,
+            content: content,
+            mediaUrl: msgOverrides.mediaUrl || null,
+            metadata: metadata || undefined,
             ...msgOverrides,
         };
 
-        dispatch(addMessage(msg));
-        setReplyingTo(null);
+        // Override type if we detected a link
+        if (metadata) {
+            messagePayload.type = 'LINK';
+            messagePayload.metadata = metadata;
+        }
 
-        // Lifecycle simulation
-        setTimeout(() => {
-            dispatch(updateMessageStatus({ chatId: activeChatId, messageId: newMsgId, status: 'delivered' }));
-            setTimeout(() => {
-                dispatch(updateMessageStatus({ chatId: activeChatId, messageId: newMsgId, status: 'read' }));
-            }, 2000);
-        }, 1500);
-    }, [activeChatId, currentUser, replyingTo, dispatch]);
+        // Remove frontend-only fields before sending
+        delete messagePayload.id;
+        delete messagePayload.status;
+        delete messagePayload.replyTo;
+        delete messagePayload.mediaUri;
+
+        try {
+            chatSocketService.sendChatMessage(messagePayload);
+            // Clear text input after sending text
+            if (!msgOverrides.type || msgOverrides.type === 'TEXT' || finalType === 'LINK') {
+                setText('');
+            }
+        } catch (error) {
+            console.error('Failed to send message via socket:', error);
+            Alert.alert('Error', 'Failed to send message. Please check your connection.');
+        }
+
+        setReplyingTo(null);
+    }, [activeChatId, currentUser, replyingTo, otherUser, text, chat, displayChat]);
 
     const handleSendText = useCallback(() => {
-        if (!text.trim() || isBlocked) return;
-        sendMessage({ text: text.trim() });
+        if (!text.trim() || isBlocked || !currentUser?.id) return;
+        sendMessage();
+        const receiverId = otherUser?.id
+            || displayChat?.otherUser?.id
+            || (chat?.user1Id === currentUser?.id ? chat?.user2Id : chat?.user1Id);
+
         setText('');
         setShowAttachments(false);
         setShowEmoji(false);
+        if (receiverId) {
+            chatSocketService.sendTyping(activeChatId || '', currentUser.id, receiverId, false);
+        }
+    }, [text, isBlocked, activeChatId, currentUser, sendMessage, otherUser, displayChat, chat]);
 
-        // Typing simulation
-        setTimeout(() => {
-            setIsTyping(true);
-            setTimeout(() => {
-                setIsTyping(false);
-                if (!activeChatId) return;
-                const newIncomingMsg: Message = {
-                    id: (Date.now() + 1).toString(),
-                    chatId: activeChatId,
-                    senderId: chat?.participants?.[1] || 'other',
-                    text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
-                    timestamp: new Date().toISOString(),
-                    status: 'read',
-                };
-                dispatch(addMessage(newIncomingMsg));
-                setSuggestions(getSmartSuggestions(newIncomingMsg.text || ''));
-            }, 2500);
-        }, 1800);
-    }, [text, isBlocked, activeChatId, chat, sendMessage, dispatch]);
+    // Typing behavior
+    useEffect(() => {
+        const receiverId = otherUser?.id
+            || displayChat?.otherUser?.id
+            || (chat?.user1Id === currentUser?.id ? chat?.user2Id : chat?.user1Id);
+
+        if (activeChatId && currentUser?.id && receiverId && text.length > 0) {
+            chatSocketService.sendTyping(activeChatId, currentUser.id, receiverId, true);
+            const timer = setTimeout(() => {
+                if (currentUser?.id) {
+                    chatSocketService.sendTyping(activeChatId, currentUser.id, receiverId, false);
+                }
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [text, activeChatId, currentUser?.id, otherUser?.id, displayChat, chat]);
 
     // ──────── AUTO-SCROLL ────────
     useEffect(() => {
         if (flatListRef.current && chatMessages.length > 0) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
-            }, 150);
+            }, 300);
+            return () => clearTimeout(timer);
         }
-    }, [chatMessages.length, isTyping]);
+    }, [chatMessages.length, isTypingRemote]);
 
     // ──────── HEADER ACTIONS ────────
     const handleBack = useCallback(() => navigation.goBack(), [navigation]);
@@ -162,9 +352,9 @@ const ChatScreen = ({ navigation }: any) => {
         if (isGroup) {
             navigation.navigate('GroupInfo', { chatId: activeChatId });
         } else {
-            navigation.navigate('UserInfo', { userId: chat?.participants?.[1] });
+            navigation.navigate('UserInfo', { userId: displayChat?.otherUser?.id });
         }
-    }, [navigation, isGroup, activeChatId, chat]);
+    }, [navigation, isGroup, activeChatId, displayChat]);
 
     const handleCallPress = useCallback(() => {
         navigation.navigate('VoiceCall', { chatId: activeChatId });
@@ -179,7 +369,7 @@ const ChatScreen = ({ navigation }: any) => {
         if (!activeChatId) return;
         switch (action) {
             case 'view_contact':
-                navigation.navigate('UserInfo', { userId: chat?.participants?.[1] });
+                navigation.navigate('UserInfo', { userId: displayChat?.otherUser?.id });
                 break;
             case 'view_group':
                 navigation.navigate('GroupInfo', { chatId: activeChatId });
@@ -196,13 +386,30 @@ const ChatScreen = ({ navigation }: any) => {
                 setShowWallpaper(true);
                 break;
             case 'clear_chat':
-                Alert.alert('Clear Chat', 'Are you sure you want to clear all messages?', [
+                Alert.alert('Clear this chat?', 'Messages will be removed from this device only.', [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Clear', style: 'destructive', onPress: () => dispatch(clearChat(activeChatId)) },
+                    {
+                        text: 'Clear chat', style: 'destructive', onPress: async () => {
+                            if (currentUser?.id) {
+                                try {
+                                    await clearChatForUser(activeChatId, currentUser.id);
+                                    dispatch(setMessages({ chatId: activeChatId, messages: [] }));
+                                } catch (err) {
+                                    console.warn('Failed to clear chat on server:', err);
+                                }
+                            }
+                        }
+                    },
                 ]);
                 break;
             case 'block':
                 if (isBlocked) {
+                    const targetUserId = otherUser?.id || displayChat?.otherUser?.id;
+                    if (currentUser?.id && targetUserId) {
+                        unblockUserApi(currentUser.id, targetUserId).catch(err =>
+                            console.warn('Failed to unblock on server:', err)
+                        );
+                    }
                     dispatch(unblockChat(activeChatId));
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 } else {
@@ -210,6 +417,12 @@ const ChatScreen = ({ navigation }: any) => {
                         { text: 'Cancel', style: 'cancel' },
                         {
                             text: 'Block', style: 'destructive', onPress: () => {
+                                const targetUserId = otherUser?.id || displayChat?.otherUser?.id;
+                                if (currentUser?.id && targetUserId) {
+                                    blockUserApi(currentUser.id, targetUserId).catch(err =>
+                                        console.warn('Failed to block on server:', err)
+                                    );
+                                }
                                 dispatch(blockChat(activeChatId));
                                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                             }
@@ -245,16 +458,58 @@ const ChatScreen = ({ navigation }: any) => {
                 setReplyingTo(longPressMessage);
                 break;
             case 'copy':
-                if (longPressMessage.text) {
-                    Clipboard.setStringAsync(longPressMessage.text);
+                if (longPressMessage.content) {
+                    Clipboard.setStringAsync(longPressMessage.content);
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 }
                 break;
             case 'delete':
-                dispatch(deleteMessage({ chatId: activeChatId, messageId: longPressMessage.id }));
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                if (currentUser?.id) {
+                    const msgTime = longPressMessage.timestamp;
+                    const thirtyMins = 30 * 60 * 1000;
+                    const canDeleteForEveryone = longPressMessage.senderId === currentUser.id && ((Date.now() - msgTime) < thirtyMins);
+
+                    const buttons: any[] = [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Delete for me',
+                            style: 'destructive',
+                            onPress: async () => {
+                                try {
+                                    await deleteMessageApi(longPressMessage.id, currentUser.id, false);
+                                    dispatch(deleteMessage({ chatId: activeChatId, messageId: longPressMessage.id, forEveryone: false }));
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                } catch (e) {
+                                    Alert.alert('Error', 'Failed to delete message.');
+                                }
+                            }
+                        }
+                    ];
+
+                    if (canDeleteForEveryone) {
+                        buttons.push({
+                            text: 'Delete for everyone',
+                            style: 'destructive',
+                            onPress: async () => {
+                                try {
+                                    await deleteMessageApi(longPressMessage.id, currentUser.id, true);
+                                    // Normally we might receive a websocket event to update others, but for now just update locally
+                                    dispatch(deleteMessage({ chatId: activeChatId, messageId: longPressMessage.id, forEveryone: true }));
+                                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                } catch (e) {
+                                    Alert.alert('Error', 'Failed to delete message for everyone.');
+                                }
+                            }
+                        });
+                    }
+
+                    Alert.alert('Delete Message', 'Are you sure you want to delete this message?', buttons);
+                }
                 break;
             case 'star':
+                try {
+                    toggleStarMessageApi(longPressMessage.id).catch(console.error);
+                } catch (e) { }
                 dispatch(starMessage({ chatId: activeChatId, messageId: longPressMessage.id }));
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 break;
@@ -281,8 +536,11 @@ const ChatScreen = ({ navigation }: any) => {
 
     // ──────── ATTACHMENT ACTIONS ────────
     const handleAttachmentSelect = useCallback(async (type: string) => {
-        if (!activeChatId || isBlocked) return;
+        if ((!activeChatId && !otherUser?.id) || isBlocked) return;
         setShowAttachments(false);
+
+        const token = store.getState().auth.token;
+        if (!token) return;
 
         switch (type) {
             case 'gallery': {
@@ -291,76 +549,90 @@ const ChatScreen = ({ navigation }: any) => {
                     quality: 0.8,
                 });
                 if (!result.canceled && result.assets?.[0]) {
+                    const uploadResult = await uploadFile('image', result.assets[0].uri, token);
                     sendMessage({
-                        mediaType: 'image',
+                        type: 'IMAGE',
+                        mediaUrl: uploadResult.url,
                         mediaUri: result.assets[0].uri,
-                        text: undefined,
                     });
                 }
                 break;
             }
             case 'camera': {
-                const perm = await ImagePicker.requestCameraPermissionsAsync();
-                if (!perm.granted) {
-                    Alert.alert('Permission needed', 'Camera access is required.');
-                    return;
-                }
-                const result = await ImagePicker.launchCameraAsync({
-                    quality: 0.8,
+                const cameraCallbackId = registerShareCallback(async (uri: string) => {
+                    const t = store.getState().auth.token;
+                    if (t) {
+                        const uploadResult = await uploadFile('image', uri, t);
+                        sendMessage({
+                            type: 'IMAGE',
+                            mediaUrl: uploadResult.url,
+                            mediaUri: uri,
+                        });
+                    }
                 });
-                if (!result.canceled && result.assets?.[0]) {
-                    sendMessage({
-                        mediaType: 'image',
-                        mediaUri: result.assets[0].uri,
-                        text: undefined,
-                    });
+                navigation.navigate('Camera', { callbackId: cameraCallbackId });
+                break;
+            }
+            case 'document': {
+                try {
+                    const docResult = await DocumentPicker.getDocumentAsync({ type: '*/*' });
+                    if (!docResult.canceled && docResult.assets?.[0]) {
+                        const doc = docResult.assets[0];
+                        const uploadResult = await uploadFile('document', doc.uri, token, (progress) => {
+                            console.log(`Document upload progress: ${progress}%`);
+                        });
+                        sendMessage({
+                            type: 'DOCUMENT',
+                            mediaUrl: uploadResult.url,
+                            content: doc.name || 'Document',
+                            fileName: doc.name || 'document',
+                            fileSize: doc.size ? `${(doc.size / 1024).toFixed(1)} KB` : undefined,
+                        });
+                    }
+                } catch (err) {
+                    console.error('Document pick failed:', err);
                 }
                 break;
             }
-            case 'document':
-                sendMessage({
-                    mediaType: 'document',
-                    fileName: 'Report_Q4_2025.pdf',
-                    fileSize: '2.4 MB',
-                    text: undefined,
+            case 'location': {
+                const locationCallbackId = registerShareCallback((data: any) => {
+                    sendMessage({
+                        type: 'LOCATION',
+                        content: JSON.stringify(data),
+                    });
                 });
+                navigation.navigate('LocationShare', { callbackId: locationCallbackId });
                 break;
-            case 'location':
-                sendMessage({
-                    mediaType: 'location',
-                    latitude: 28.6139,
-                    longitude: 77.2090,
-                    text: 'New Delhi, India',
+            }
+            case 'contact': {
+                const contactCallbackId = registerShareCallback((data: any) => {
+                    sendMessage({
+                        type: 'CONTACT',
+                        content: JSON.stringify(data),
+                    });
                 });
+                navigation.navigate('ContactShare', { callbackId: contactCallbackId });
                 break;
-            case 'contact':
-                sendMessage({
-                    mediaType: 'contact',
-                    contactName: 'John Smith',
-                    contactPhone: '+1 555 123 4567',
-                    text: undefined,
-                });
-                break;
+            }
         }
     }, [activeChatId, isBlocked, sendMessage]);
 
     // ──────── CAMERA SHORTCUT ────────
     const handleCameraPress = useCallback(async () => {
         if (isBlocked) return;
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-            Alert.alert('Permission needed', 'Camera access is required.');
-            return;
-        }
-        const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-        if (!result.canceled && result.assets?.[0]) {
-            sendMessage({
-                mediaType: 'image',
-                mediaUri: result.assets[0].uri,
-                text: undefined,
-            });
-        }
-    }, [isBlocked, sendMessage]);
+        const callbackId = registerShareCallback(async (uri: string) => {
+            const token = store.getState().auth.token;
+            if (token) {
+                const uploadResult = await uploadFile('image', uri, token);
+                sendMessage({
+                    type: 'IMAGE',
+                    mediaUrl: uploadResult.url,
+                    mediaUri: uri,
+                });
+            }
+        });
+        navigation.navigate('Camera', { callbackId });
+    }, [isBlocked, sendMessage, navigation]);
 
     // ──────── VOICE RECORDING ────────
     const handleMicPress = useCallback(() => {
@@ -371,13 +643,28 @@ const ChatScreen = ({ navigation }: any) => {
         setShowAttachments(false);
     }, [isBlocked]);
 
-    const handleVoiceSend = useCallback((duration: number) => {
+    const handleVoiceSend = useCallback(async (duration: number, uri: string) => {
         setIsRecording(false);
-        sendMessage({
-            mediaType: 'voice',
-            voiceDuration: duration,
-            text: undefined,
-        });
+        const token = store.getState().auth.token;
+        if (!token || !uri) return;
+
+        // Optimistic UI for progress could be added here, but for now just send
+        try {
+            const uploadResult = await uploadFile('audio', uri, token, (progress) => {
+                console.log(`Audio upload progress: ${progress}%`);
+                // We could set an upload progress state here to show in UI
+            });
+
+            sendMessage({
+                type: 'AUDIO',
+                mediaUrl: uploadResult.url,
+                content: `Audio (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
+                voiceDuration: duration,
+            });
+        } catch (err) {
+            console.error('Audio upload failed:', err);
+            Alert.alert('Error', 'Could not upload audio recording.');
+        }
     }, [sendMessage]);
 
     // ──────── EMOJI ────────
@@ -390,6 +677,14 @@ const ChatScreen = ({ navigation }: any) => {
     const handleEmojiSelect = useCallback((emoji: string) => {
         setText(prev => prev + emoji);
     }, []);
+
+    const handleGifSelect = useCallback((url: string) => {
+        setShowEmoji(false);
+        sendMessage({
+            type: 'GIF',
+            mediaUrl: url,
+        });
+    }, [sendMessage]);
 
     // ──────── SEARCH ────────
     const handleScrollToIndex = useCallback((index: number) => {
@@ -405,13 +700,46 @@ const ChatScreen = ({ navigation }: any) => {
     // ──────── STATUS TEXT ────────
     const getStatusText = () => {
         if (isBlocked) return 'blocked';
-        if (isTyping) return 'typing...';
-        return 'online';
+        if (isTypingRemote) return 'typing...';
+
+        const status = displayChat?.otherUser?.status;
+        if (status === 'online') return 'online';
+        if (status && status !== 'offline') {
+            try {
+                const date = new Date(status);
+                // Check if valid date
+                if (!isNaN(date.getTime())) {
+                    const now = new Date();
+                    const diffMs = now.getTime() - date.getTime();
+                    const diffMins = Math.floor(diffMs / (1000 * 60));
+                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    const diffMonths = Math.floor(diffDays / 30);
+
+                    if (diffMins < 60) {
+                        return `last seen ${Math.max(1, diffMins)} minutes ago`;
+                    } else if (diffHours < 24) {
+                        return `last seen ${diffHours} hours ago`;
+                    } else if (diffDays < 7) {
+                        return `last seen ${diffDays} days ago`;
+                    } else if (diffDays > 30) {
+                        return `last seen ${diffMonths} months ago`;
+                    } else {
+                        // fallback for 7-30 days range
+                        return `last seen ${diffDays} days ago`;
+                    }
+                }
+            } catch (e) {
+                // fallthrough
+            }
+        }
+
+        return 'offline';
     };
 
     // ──────── RENDER MESSAGE ────────
     const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
-        const isMine = item.senderId === 'me' || item.senderId === currentUser?.id;
+        const isMine = item.senderId === currentUser?.id;
         const prevMsg = index > 0 ? chatMessages[index - 1] : null;
         const nextMsg = index < chatMessages.length - 1 ? chatMessages[index + 1] : null;
         const isFirstInGroup = !prevMsg || prevMsg.senderId !== item.senderId;
@@ -430,7 +758,7 @@ const ChatScreen = ({ navigation }: any) => {
         let replyPreviewText: string | undefined;
         if (item.replyTo) {
             const repliedMsg = chatMessages.find(m => m.id === item.replyTo);
-            replyPreviewText = repliedMsg?.text || 'Message';
+            replyPreviewText = repliedMsg?.content || 'Message';
         }
 
         const isHighlighted = highlightedMessageIds.includes(item.id);
@@ -444,6 +772,7 @@ const ChatScreen = ({ navigation }: any) => {
                 isFirstInGroup={isFirstInGroup}
                 isLastInGroup={isLastInGroup}
                 onLongPress={handleMessageLongPress}
+                onSwipeToReply={(message: Message) => setReplyingTo(message)}
                 replyPreviewText={replyPreviewText}
                 isHighlighted={isHighlighted}
                 searchQuery={searchQuery}
@@ -453,9 +782,9 @@ const ChatScreen = ({ navigation }: any) => {
 
     const keyExtractor = useCallback((item: Message) => item.id, []);
 
-    if (!chat) return null;
+    if (!chat && !otherUser) return null;
 
-    const wallpaperBg = chat.wallpaper || theme.colors.background;
+    const wallpaperBg = displayChat?.wallpaper || theme.colors.background;
 
     return (
         <View style={styles.container}>
@@ -463,7 +792,7 @@ const ChatScreen = ({ navigation }: any) => {
 
             {/* Header */}
             <ChatHeader
-                chat={chat}
+                chat={displayChat}
                 statusText={getStatusText()}
                 onBack={handleBack}
                 onInfoPress={handleInfoPress}
@@ -489,11 +818,18 @@ const ChatScreen = ({ navigation }: any) => {
             <ChatHeaderMenu
                 visible={showHeaderMenu}
                 isGroup={isGroup || false}
-                isMuted={chat.isMuted}
+                isMuted={displayChat?.isMuted}
                 isBlocked={isBlocked}
                 onClose={() => setShowHeaderMenu(false)}
                 onAction={handleMenuAction}
             />
+
+            {/* Offline Banner */}
+            {isOffline && (
+                <View style={styles.offlineBanner}>
+                    <Text style={styles.offlineText}>⏳ No internet connection</Text>
+                </View>
+            )}
 
             {/* Messages */}
             <KeyboardAvoidingView
@@ -514,7 +850,7 @@ const ChatScreen = ({ navigation }: any) => {
                     removeClippedSubviews={Platform.OS === 'android'}
                     keyboardShouldPersistTaps="handled"
                     keyboardDismissMode="interactive"
-                    ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+                    ListFooterComponent={isTypingRemote ? <TypingIndicator /> : null}
                     onScrollBeginDrag={() => {
                         if (showAttachments) setShowAttachments(false);
                         if (showEmoji) setShowEmoji(false);
@@ -536,7 +872,7 @@ const ChatScreen = ({ navigation }: any) => {
                                     Replying to {replyingTo.senderId === (currentUser?.id || 'me') ? 'yourself' : 'message'}
                                 </Text>
                                 <Text style={styles.replyBarMessage} numberOfLines={1}>
-                                    {replyingTo.text || 'Media'}
+                                    {replyingTo.content || 'Media'}
                                 </Text>
                             </View>
                         </View>
@@ -563,10 +899,11 @@ const ChatScreen = ({ navigation }: any) => {
                     onSelect={handleAttachmentSelect}
                 />
 
-                {/* Emoji Picker */}
+                {/* Emoji / GIF Picker */}
                 <EmojiPicker
                     visible={showEmoji}
                     onSelect={handleEmojiSelect}
+                    onSelectGif={handleGifSelect}
                     onClose={() => setShowEmoji(false)}
                 />
 
@@ -619,7 +956,7 @@ const ChatScreen = ({ navigation }: any) => {
             {/* Wallpaper Picker */}
             <WallpaperPicker
                 visible={showWallpaper}
-                currentWallpaper={chat.wallpaper}
+                currentWallpaper={displayChat?.wallpaper}
                 onSelect={handleWallpaperSelect}
                 onClose={() => setShowWallpaper(false)}
             />
@@ -691,6 +1028,17 @@ const styles = StyleSheet.create({
         fontSize: 13,
         textAlign: 'center',
         fontWeight: '500',
+    },
+    offlineBanner: {
+        backgroundColor: 'rgba(255,149,0,0.15)',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+    },
+    offlineText: {
+        color: '#FF9500',
+        fontSize: 13,
+        fontWeight: '600',
     },
 });
 

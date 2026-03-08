@@ -3,6 +3,7 @@ import { AuthState, User } from '../../types';
 
 const initialState: AuthState = {
     user: null,
+    token: null,
     isAuthenticated: false,
     isLoading: false,
     isOtpVerified: false,
@@ -16,10 +17,11 @@ const authSlice = createSlice({
         loginStart: (state) => {
             state.isLoading = true;
         },
-        loginSuccess: (state, action: PayloadAction<User>) => {
+        loginSuccess: (state, action: PayloadAction<{ user: User, token: string }>) => {
             state.isLoading = false;
             state.isAuthenticated = true;
-            state.user = action.payload;
+            state.user = action.payload.user;
+            state.token = action.payload.token;
             state.profileCompleted = true;
         },
         loginFailure: (state) => {

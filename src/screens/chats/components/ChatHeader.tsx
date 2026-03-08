@@ -80,10 +80,18 @@ const ChatHeader: React.FC<ChatHeaderProps> = React.memo(({
                 onPress={onInfoPress}
             >
                 <View style={styles.avatarContainer}>
-                    <Image
-                        source={{ uri: chat.avatar }}
-                        style={styles.avatar}
-                    />
+                    {chat.otherUser?.profilePicture || chat.avatar ? (
+                        <Image
+                            source={{ uri: chat.otherUser?.profilePicture || chat.avatar }}
+                            style={styles.avatar}
+                        />
+                    ) : (
+                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                            <Text style={styles.avatarInitial}>
+                                {(chat.otherUser?.name || chat.name || '?').charAt(0).toUpperCase()}
+                            </Text>
+                        </View>
+                    )}
                     {isOnline && <OnlineDot />}
                 </View>
                 <View style={styles.textArea}>
@@ -167,6 +175,16 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
+    },
+    avatarPlaceholder: {
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarInitial: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 16,
+        fontWeight: '700',
     },
     onlineDotOuter: {
         position: 'absolute',

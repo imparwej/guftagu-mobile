@@ -8,9 +8,16 @@ import PhoneScreen from '../screens/auth/PhoneScreen';
 import WelcomeScreen from '../screens/auth/WelcomeScreen';
 import VideoCallScreen from '../screens/calls/VideoCallScreen';
 import VoiceCallScreen from '../screens/calls/VoiceCallScreen';
+import CameraScreen from '../screens/chats/CameraScreen';
 import ChatScreen from '../screens/chats/ChatScreen';
 import ContactListScreen from '../screens/chats/ContactListScreen';
+import ContactShareScreen from '../screens/chats/ContactShareScreen';
+import ForwardMessageScreen from '../screens/chats/ForwardMessageScreen';
 import GroupInfoScreen from '../screens/chats/GroupInfoScreen';
+import LocationShareScreen from '../screens/chats/LocationShareScreen';
+import MediaLinksDocsScreen from '../screens/chats/MediaLinksDocsScreen';
+import MediaPreviewScreen from '../screens/chats/MediaPreviewScreen';
+import StarredMessagesScreen from '../screens/chats/StarredMessagesScreen';
 import UserInfoScreen from '../screens/chats/UserInfoScreen';
 import LinkedDevicesScreen from '../screens/devices/LinkedDevicesScreen';
 import StatusViewerScreen from '../screens/status/StatusViewerScreen';
@@ -30,8 +37,8 @@ const RootNavigator = () => {
         (state: RootState) => state.auth,
     );
 
-    // Once authenticated with profile complete, auth screens are unreachable
-    const isFullyOnboarded = isAuthenticated && profileCompleted;
+    // Ensure we always have a stable boolean
+    const isFullyOnboarded = !!(isAuthenticated && profileCompleted);
 
     return (
         <Stack.Navigator
@@ -41,9 +48,8 @@ const RootNavigator = () => {
             }}
         >
             {isFullyOnboarded ? (
-                // ── Authenticated stack — no auth screens in tree at all
-                <>
-                    <Stack.Screen name="Chats" component={TabNavigator} />
+                <Stack.Group key="app-flow">
+                    <Stack.Screen name="Main" component={TabNavigator} />
                     <Stack.Screen
                         name="ContactList"
                         component={ContactListScreen}
@@ -84,10 +90,37 @@ const RootNavigator = () => {
                         component={LinkedDevicesScreen}
                         options={{ animation: 'slide_from_right' }}
                     />
-                </>
+                    <Stack.Screen
+                        name="Camera"
+                        component={CameraScreen}
+                        options={{ presentation: 'fullScreenModal', animation: 'fade' }}
+                    />
+                    <Stack.Screen
+                        name="LocationShare"
+                        component={LocationShareScreen}
+                        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+                    />
+                    <Stack.Screen
+                        name="ContactShare"
+                        component={ContactShareScreen}
+                        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+                    />
+                    <Stack.Screen
+                        name="MediaPreview"
+                        component={MediaPreviewScreen}
+                        options={{ presentation: 'transparentModal', animation: 'fade' }}
+                    />
+                    {/* <Stack.Screen name="ConversationDetails" component={ConversationDetailsScreen} /> */}
+                    <Stack.Screen
+                        name="MediaLinksDocs"
+                        component={MediaLinksDocsScreen}
+                        options={{ animation: 'slide_from_right' }}
+                    />
+                    <Stack.Screen name="StarredMessages" component={StarredMessagesScreen} options={{ presentation: 'card' }} />
+                    <Stack.Screen name="ForwardMessage" component={ForwardMessageScreen} options={{ presentation: 'formSheet' }} />
+                </Stack.Group>
             ) : (
-                // ── Auth/onboarding stack
-                <>
+                <Stack.Group key="auth-flow">
                     <Stack.Screen name="Splash" component={SplashScreen} />
                     <Stack.Screen
                         name="Welcome"
@@ -109,7 +142,7 @@ const RootNavigator = () => {
                         component={CreateProfileScreen}
                         options={onboardingTransition}
                     />
-                </>
+                </Stack.Group>
             )}
         </Stack.Navigator>
     );

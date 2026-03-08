@@ -14,7 +14,7 @@ import {
     VolumeX,
     X
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     FlatList,
     Image,
@@ -37,22 +37,26 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useDispatch, useSelector } from 'react-redux';
 import GuftaguLogo from '../../../assets/images/favicon.svg';
+import { getChats, markAsRead } from '../../api/chatApi';
 import EmptyState from '../../components/EmptyState';
 import PressableScale from '../../components/PressableScale';
 import Skeleton from '../../components/Skeleton';
 import { TAB_BAR_HEIGHT } from '../../navigation/tabConstants';
+import { chatSocketService } from '../../socket/chatSocket';
 import {
+    addMessage,
     clearChat,
     deleteChats,
     markAllAsRead,
-    markAsRead,
+    markAsReadInStore,
     setActiveChat,
+    setChats,
     toggleMute,
     togglePin,
 } from '../../store/slices/chatSlice';
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
-import { Chat } from '../../types';
+import { Chat, Message } from '../../types';
 import ChatContextMenu from './ChatContextMenu';
 
 
@@ -106,10 +110,12 @@ const ChatSkeleton = () => (
 /* ─── Main Component ───────────────────────────────────────────────────────── */
 const ChatListScreen = ({ navigation }: any) => {
     const dispatch = useDispatch();
-    const { chats, messages } = useSelector((state: RootState) => state.chat);
+    const { chats } = useSelector((state: RootState) => state.chat);
+    const currentUser = useSelector((state: RootState) => state.auth.user);
 
     // Local state
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState<FilterType>('all');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -119,10 +125,42 @@ const ChatListScreen = ({ navigation }: any) => {
 
     const isSelectionMode = selectedIds.size > 0;
 
-    React.useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1200);
-        return () => clearTimeout(timer);
-    }, []);
+    const fetchChats = useCallback(async () => {
+        if (!currentUser?.id) return;
+        try {
+            const data = await getChats(currentUser.id);
+            dispatch(setChats(data));
+        } catch (error) {
+            console.error('Failed to fetch chats:', error);
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    }, [currentUser?.id, dispatch]);
+
+    useEffect(() => {
+        fetchChats();
+
+        // Connect and subscribe to user-specific message queue
+        if (currentUser?.id) {
+            chatSocketService.connect(
+                () => {
+                    chatSocketService.subscribe('/user/queue/messages', (message: Message) => {
+                        dispatch(addMessage(message));
+                    });
+                    chatSocketService.subscribe('/topic/presence', (payload: any) => {
+                        // The reducer already handles dispatching the state update in chatSocketService,
+                        // but we need the subscription active here to receive the events.
+                    });
+                },
+                (err) => console.error('Socket error:', err)
+            );
+        }
+
+        return () => {
+            // chatSocketService.disconnect(); // Keep alive if possible or manage lifecycle
+        };
+    }, [currentUser?.id, fetchChats, dispatch]);
 
     /* ─── Derived data ──────────────────────────────────────────────────── */
     const filteredChats = useMemo(() => {
@@ -131,7 +169,7 @@ const ChatListScreen = ({ navigation }: any) => {
         // Filter by search
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
-            result = result.filter(c => c.name?.toLowerCase().includes(q));
+            result = result.filter(c => c.name?.toLowerCase().includes(q) || c.otherUser?.name?.toLowerCase().includes(q));
         }
 
         // Filter by category
@@ -141,17 +179,15 @@ const ChatListScreen = ({ navigation }: any) => {
             result = result.filter(c => c.isGroup);
         }
 
-        // Sort: pinned first, then by last message time
+        // Sort by last message time
         return result.sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
-            const aMsg = messages[a.id]?.[messages[a.id]?.length - 1];
-            const bMsg = messages[b.id]?.[messages[b.id]?.length - 1];
-            const aTime = aMsg ? new Date(aMsg.timestamp).getTime() : 0;
-            const bTime = bMsg ? new Date(bMsg.timestamp).getTime() : 0;
+            const aTime = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+            const bTime = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
             return bTime - aTime;
         });
-    }, [chats, messages, searchQuery, activeFilter]);
+    }, [chats, searchQuery, activeFilter, currentUser?.id]);
 
     const contextChat = useMemo(() => {
         return chats.find(c => c.id === contextChatId) || null;
@@ -218,7 +254,7 @@ const ChatListScreen = ({ navigation }: any) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         switch (label) {
             case 'Read All':
-                dispatch(markAllAsRead());
+                if (currentUser?.id) dispatch(markAllAsRead());
                 break;
             case 'Settings':
                 navigation.navigate('Settings');
@@ -231,9 +267,11 @@ const ChatListScreen = ({ navigation }: any) => {
 
     /* ─── Render: Chat Row ──────────────────────────────────────────────── */
     const renderChatItem = useCallback(({ item }: { item: Chat }) => {
-        const lastMessage = messages[item.id]?.[messages[item.id]?.length - 1];
         const isSelected = selectedIds.has(item.id);
-        const hasUnread = item.unreadCount > 0;
+        const unreadCount = item.unreadCount;
+        const hasUnread = unreadCount > 0;
+        const displayName = item.name || item.otherUser?.name || 'User';
+        const displayAvatar = item.otherUser?.profilePicture || item.avatar || item.otherUser?.avatar || 'https://i.pravatar.cc/150';
 
         return (
             <Animated.View entering={FadeInDown.duration(300).delay(50)} layout={Layout.springify()}>
@@ -249,14 +287,14 @@ const ChatListScreen = ({ navigation }: any) => {
                 >
                     {/* Avatar */}
                     <View style={styles.avatarContainer}>
-                        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                        <Image source={{ uri: displayAvatar }} style={styles.avatar} />
                         {isSelected && (
                             <Animated.View entering={FadeIn.duration(150)} style={styles.checkOverlay}>
                                 <Check size={16} color="#000" strokeWidth={3} />
                             </Animated.View>
                         )}
-                        {/* Online indicator for Alice */}
-                        {item.name === 'Alice' && !isSelected && (
+                        {/* Online indicator placeholder */}
+                        {item.otherUser?.status === 'online' && !isSelected && (
                             <View style={styles.onlineIndicator} />
                         )}
                     </View>
@@ -272,7 +310,7 @@ const ChatListScreen = ({ navigation }: any) => {
                                     ]}
                                     numberOfLines={1}
                                 >
-                                    {item.name}
+                                    {displayName}
                                 </Text>
                                 {item.isGroup && (
                                     <Users
@@ -282,15 +320,15 @@ const ChatListScreen = ({ navigation }: any) => {
                                     />
                                 )}
                             </View>
-                            {lastMessage && (
+                            {item.lastMessageTime && (
                                 <Text style={[styles.timeText, hasUnread && styles.timeTextUnread]}>
-                                    {formatTime(lastMessage.timestamp)}
+                                    {formatTime(item.lastMessageTime)}
                                 </Text>
                             )}
                         </View>
                         <View style={styles.chatBottomRow}>
                             <Text style={[styles.lastMessage, hasUnread && styles.lastMessageUnread]} numberOfLines={1}>
-                                {lastMessage?.text || 'Start a conversation'}
+                                {item.lastMessage || 'No messages yet'}
                             </Text>
                             <View style={styles.badges}>
                                 {item.isMuted && (
@@ -301,7 +339,7 @@ const ChatListScreen = ({ navigation }: any) => {
                                 )}
                                 {hasUnread && (
                                     <View style={styles.unreadBadge}>
-                                        <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                                        <Text style={styles.unreadText}>{unreadCount}</Text>
                                     </View>
                                 )}
                             </View>
@@ -310,7 +348,7 @@ const ChatListScreen = ({ navigation }: any) => {
                 </PressableScale>
             </Animated.View>
         );
-    }, [messages, selectedIds, isSelectionMode, handleChatPress, handleLongPress]);
+    }, [selectedIds, currentUser?.id, handleChatPress, handleLongPress]);
 
     /* ─── JSX ───────────────────────────────────────────────────────────── */
     return (
@@ -429,16 +467,16 @@ const ChatListScreen = ({ navigation }: any) => {
                         filteredChats.length === 0 && styles.listEmpty,
                     ]}
                     showsVerticalScrollIndicator={false}
+                    refreshing={isRefreshing}
+                    onRefresh={fetchChats}
                     ListEmptyComponent={
                         <Animated.View entering={FadeIn.duration(400)} style={styles.emptyContainer}>
                             <EmptyState
-                                icon={Search}
-                                title={searchQuery ? 'No results' : 'No chats yet'}
-                                description={searchQuery
-                                    ? `No chats matching "${searchQuery}"`
-                                    : 'Tap the button below to start a conversation'}
-                                actionLabel={searchQuery ? 'Clear Search' : undefined}
-                                onAction={searchQuery ? () => setSearchQuery('') : undefined}
+                                icon={Users}
+                                title="No conversations yet"
+                                description="Start chatting with people who use Guftagu"
+                                actionLabel="Start New Chat"
+                                onAction={() => navigation.navigate('ContactList')}
                             />
                         </Animated.View>
                     }
@@ -511,7 +549,10 @@ const ChatListScreen = ({ navigation }: any) => {
                     }
                 }}
                 onMarkAsRead={() => {
-                    if (contextChatId) dispatch(markAsRead([contextChatId]));
+                    if (contextChatId && currentUser?.id) {
+                        markAsRead(contextChatId, currentUser.id);
+                        dispatch(markAsReadInStore({ chatId: contextChatId, userId: currentUser.id }));
+                    }
                 }}
                 onClearChat={() => {
                     if (contextChatId) dispatch(clearChat(contextChatId));

@@ -31,7 +31,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import PressableScale from '../../components/PressableScale';
-import { setOtpVerified } from '../../store/slices/authSlice';
+import { loginSuccess, setOtpVerified } from '../../store/slices/authSlice';
 import { RootState } from '../../store/store';
 
 import { sendOtp, verifyOtp } from '../../api/api';
@@ -409,11 +409,11 @@ const OtpScreen = ({ navigation }: any) => {
                 successScale.value = withSpring(1, { damping: 12, stiffness: 100 });
 
                 setTimeout(() => {
-                    dispatch(setOtpVerified(true));
-
                     if (response.status === "LOGIN_SUCCESS") {
-                        navigation.replace("Chats");
+                        dispatch(loginSuccess({ user: response.user, token: response.token }));
                     } else {
+                        // VERIFIED case
+                        dispatch(setOtpVerified(true));
                         navigation.replace("CreateProfile");
                     }
                 }, 1200);

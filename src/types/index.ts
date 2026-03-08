@@ -2,7 +2,10 @@ export interface User {
     id: string;
     name: string;
     avatar: string;
+    profilePicture?: string;
+    bio?: string;
     status?: string;
+    phone?: string;
     phoneNumber?: string;
     lastSeen?: string;
     about?: string;
@@ -12,36 +15,52 @@ export interface User {
 
 export interface Message {
     id: string;
-    chatId: string;
+    conversationId: string;
     senderId: string;
-    text?: string;
-    mediaUri?: string;
-    mediaType?: 'image' | 'video' | 'audio' | 'document' | 'voice' | 'location' | 'contact';
-    timestamp: string;
-    status: 'sending' | 'sent' | 'delivered' | 'read';
+    receiverId: string;
+    type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'LOCATION' | 'CONTACT' | 'GIF' | 'LINK';
+    content: string;
+    mediaUrl?: string;
+    mediaUri?: string; // UI local uri
+    timestamp: number;
+    delivered: boolean;
+    seen: boolean;
+    status?: 'SENT' | 'DELIVERED' | 'READ' | 'SENDING'; // Legacy UI status, not used for ticks
     replyTo?: string;
-    isStarred?: boolean;
-    // Document fields
+    starred?: boolean;
+    isStarred?: boolean; // Keep for legacy state until refactored
+    forwarded?: boolean;
     fileName?: string;
     fileSize?: string;
-    // Location fields
     latitude?: number;
     longitude?: number;
-    // Contact card fields
     contactName?: string;
     contactPhone?: string;
-    // Voice message
     voiceDuration?: number;
-    // Reactions: emoji -> list of userIds
     reactions?: Record<string, string[]>;
+
+    // Link preview fields
+    url?: string;
+    linkTitle?: string;
+    linkDescription?: string;
+    linkImage?: string;
+
+    // Disappearing message fields
+    expiresAt?: number;
+
+    // Link metadata from backend
+    metadata?: Record<string, string>;
 }
 
 export interface Chat {
     id: string;
-    participants: string[];
-    lastMessageId?: string;
+    user1Id?: string;
+    user2Id?: string;
+    lastMessage?: string;
+    lastMessageTime?: string;
     unreadCount: number;
-    type: 'individual' | 'group';
+    // Extended fields for UI
+    otherUser?: User;
     name?: string;
     avatar?: string;
     isPinned?: boolean;
@@ -85,6 +104,7 @@ export interface Story {
 
 export interface AuthState {
     user: User | null;
+    token: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
     phoneNumber?: string;

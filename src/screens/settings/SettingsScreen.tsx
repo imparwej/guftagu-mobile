@@ -9,6 +9,7 @@ import {
     LucideMessageCircle,
     LucideSearch,
     LucideSmile,
+    LucideStar,
     LucideUser,
     LucideUsers
 } from 'lucide-react-native';
@@ -65,6 +66,13 @@ const SETTINGS_ITEMS = [
         subtitle: 'Theme, Wallpapers, Chat history',
         icon: LucideMessageCircle,
         screen: 'ChatsSettings'
+    },
+    {
+        id: 'starred',
+        title: 'Starred Messages',
+        subtitle: 'View your starred messages',
+        icon: LucideStar,
+        screen: 'StarredMessages'
     },
     {
         id: 'notifications',

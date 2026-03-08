@@ -51,7 +51,7 @@ const ChatSearchBar: React.FC<ChatSearchBarProps> = ({
         const indices: number[] = [];
         const ids: string[] = [];
         messages.forEach((msg, idx) => {
-            if (msg.text && msg.text.toLowerCase().includes(lower)) {
+            if (msg.content && msg.content.toLowerCase().includes(lower)) {
                 indices.push(idx);
                 ids.push(msg.id);
             }

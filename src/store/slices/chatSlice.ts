@@ -7,48 +7,9 @@ interface ChatState {
     activeChatId: string | null;
 }
 
-const dummyChats: Chat[] = [
-    { id: '1', participants: ['1', '2'], lastMessageId: 'm1', unreadCount: 2, type: 'individual', name: 'Alice', avatar: 'https://i.pravatar.cc/150?u=2', isPinned: true, isGroup: false },
-    { id: '2', participants: ['1', '3'], lastMessageId: 'm2', unreadCount: 0, type: 'individual', name: 'Bob', avatar: 'https://i.pravatar.cc/150?u=3', isGroup: false },
-    { id: '3', participants: ['1', '4', '5', '6'], lastMessageId: 'm3', unreadCount: 5, type: 'group', name: 'Design Team', avatar: 'https://i.pravatar.cc/150?u=team1', isPinned: true, isGroup: true, groupMembers: ['1', '4', '5', '6'] },
-    { id: '4', participants: ['1', '7'], lastMessageId: 'm4', unreadCount: 1, type: 'individual', name: 'David', avatar: 'https://i.pravatar.cc/150?u=7', isGroup: false },
-    { id: '5', participants: ['1', '8'], lastMessageId: 'm5', unreadCount: 0, type: 'individual', name: 'Emma', avatar: 'https://i.pravatar.cc/150?u=8', isMuted: true, isGroup: false },
-    { id: '6', participants: ['1', '9', '10', '11', '12'], lastMessageId: 'm6', unreadCount: 12, type: 'group', name: 'Weekend Plans', avatar: 'https://i.pravatar.cc/150?u=team2', isGroup: true, groupMembers: ['1', '9', '10', '11', '12'] },
-    { id: '7', participants: ['1', '13'], lastMessageId: 'm7', unreadCount: 0, type: 'individual', name: 'Sophia', avatar: 'https://i.pravatar.cc/150?u=13', isGroup: false },
-    { id: '8', participants: ['1', '14'], lastMessageId: 'm8', unreadCount: 3, type: 'individual', name: 'James', avatar: 'https://i.pravatar.cc/150?u=14', isGroup: false },
-];
-
-const dummyMessages: Record<string, Message[]> = {
-    '1': [
-        { id: 'm0', chatId: '1', senderId: '2', text: 'Hey there!', timestamp: new Date(Date.now() - 3600000).toISOString(), status: 'read' },
-        { id: 'm1', chatId: '1', senderId: '2', text: 'How are you?', timestamp: new Date(Date.now() - 10000).toISOString(), status: 'delivered' },
-    ],
-    '2': [
-        { id: 'm2', chatId: '2', senderId: '1', text: 'See you tomorrow.', timestamp: new Date(Date.now() - 86400000).toISOString(), status: 'read' },
-    ],
-    '3': [
-        { id: 'm3', chatId: '3', senderId: '5', text: 'Updated the mockups 🎨', timestamp: new Date(Date.now() - 1800000).toISOString(), status: 'delivered' },
-    ],
-    '4': [
-        { id: 'm4', chatId: '4', senderId: '7', text: 'Can we reschedule?', timestamp: new Date(Date.now() - 7200000).toISOString(), status: 'delivered' },
-    ],
-    '5': [
-        { id: 'm5', chatId: '5', senderId: '1', text: "Sure, let me check.", timestamp: new Date(Date.now() - 172800000).toISOString(), status: 'read' },
-    ],
-    '6': [
-        { id: 'm6', chatId: '6', senderId: '10', text: "Let's go hiking! 🏔️", timestamp: new Date(Date.now() - 900000).toISOString(), status: 'delivered' },
-    ],
-    '7': [
-        { id: 'm7', chatId: '7', senderId: '1', text: 'Thanks for the recommendation.', timestamp: new Date(Date.now() - 259200000).toISOString(), status: 'read' },
-    ],
-    '8': [
-        { id: 'm8', chatId: '8', senderId: '14', text: 'Did you see the news?', timestamp: new Date(Date.now() - 5400000).toISOString(), status: 'delivered' },
-    ],
-};
-
 const initialState: ChatState = {
-    chats: dummyChats,
-    messages: dummyMessages,
+    chats: [],
+    messages: {},
     activeChatId: null,
 };
 
@@ -56,21 +17,60 @@ const chatSlice = createSlice({
     name: 'chats',
     initialState,
     reducers: {
-        setChats: (state, action: PayloadAction<Chat[]>) => {
-            state.chats = action.payload;
+        setChats: (state, action: PayloadAction<any[]>) => {
+            state.chats = action.payload.map(item => ({
+                id: item.conversationId,
+                lastMessage: item.lastMessage,
+                lastMessageTime: item.lastMessageTime,
+                unreadCount: item.unreadCount,
+                otherUser: {
+                    id: item.otherUserId,
+                    name: item.otherUserName,
+                    avatar: item.otherUserAvatar,
+                    status: item.isOnline ? 'online' : item.lastSeen,
+                    lastSeen: item.lastSeen,
+                },
+                name: item.otherUserName,
+                avatar: item.otherUserAvatar,
+            } as Chat));
         },
         setActiveChat: (state, action: PayloadAction<string | null>) => {
             state.activeChatId = action.payload;
         },
         addMessage: (state, action: PayloadAction<Message>) => {
-            const { chatId } = action.payload;
-            if (!state.messages[chatId]) {
-                state.messages[chatId] = [];
+            const { conversationId } = action.payload;
+            if (!state.messages[conversationId]) {
+                state.messages[conversationId] = [];
             }
-            state.messages[chatId].push(action.payload);
-            const chat = state.chats.find(c => c.id === chatId);
-            if (chat) {
-                chat.lastMessageId = action.payload.id;
+            // Check if message already exists (duplicate prevention)
+            const exists = state.messages[conversationId].find(m => m.id === action.payload.id);
+            if (!exists) {
+                state.messages[conversationId].push(action.payload);
+            }
+
+            // Update chat list summary
+            const chatIndex = state.chats.findIndex(c => c.id === conversationId);
+            if (chatIndex !== -1) {
+                const chat = state.chats[chatIndex];
+                chat.lastMessage = action.payload.content;
+                chat.lastMessageTime = String(action.payload.timestamp);
+
+                // If not active chat and not from me, increment unread
+                if (state.activeChatId !== conversationId) {
+                    chat.unreadCount = (chat.unreadCount || 0) + 1;
+                }
+
+                // Move to top
+                state.chats.splice(chatIndex, 1);
+                state.chats.unshift(chat);
+            } else {
+                // New conversation — create a placeholder chat entry
+                state.chats.unshift({
+                    id: conversationId,
+                    lastMessage: action.payload.content,
+                    lastMessageTime: String(action.payload.timestamp),
+                    unreadCount: state.activeChatId === conversationId ? 0 : 1,
+                } as Chat);
             }
         },
         setMessages: (state, action: PayloadAction<{ chatId: string; messages: Message[] }>) => {
@@ -85,10 +85,24 @@ const chatSlice = createSlice({
                 }
             }
         },
-        deleteMessage: (state, action: PayloadAction<{ chatId: string; messageId: string }>) => {
+        deleteMessage: (state, action: PayloadAction<{ chatId: string; messageId: string; forEveryone?: boolean }>) => {
             const chatMessages = state.messages[action.payload.chatId];
             if (chatMessages) {
-                state.messages[action.payload.chatId] = chatMessages.filter(m => m.id !== action.payload.messageId);
+                if (action.payload.forEveryone) {
+                    state.messages[action.payload.chatId] = chatMessages.map(msg =>
+                        msg.id === action.payload.messageId
+                            ? {
+                                ...msg,
+                                content: "This message was deleted",
+                                deletedForEveryone: true,
+                                mediaUrl: undefined,
+                                type: 'TEXT'
+                            }
+                            : msg
+                    );
+                } else {
+                    state.messages[action.payload.chatId] = chatMessages.filter(m => m.id !== action.payload.messageId);
+                }
             }
         },
         starMessage: (state, action: PayloadAction<{ chatId: string; messageId: string }>) => {
@@ -129,7 +143,6 @@ const chatSlice = createSlice({
             if (chat) chat.name = action.payload.name;
         },
         exitGroup: (state, action: PayloadAction<string>) => {
-            // Remove current user from group and delete from chats list
             state.chats = state.chats.filter(c => c.id !== action.payload);
             delete state.messages[action.payload];
             if (state.activeChatId === action.payload) {
@@ -142,20 +155,29 @@ const chatSlice = createSlice({
                 delete state.messages[id];
             });
         },
-        markAsRead: (state, action: PayloadAction<string[]>) => {
-            action.payload.forEach(id => {
-                const chat = state.chats.find(c => c.id === id);
-                if (chat) chat.unreadCount = 0;
-            });
+        markAsReadInStore: (state, action: PayloadAction<{ chatId: string; userId: string }>) => {
+            const { chatId } = action.payload;
+            const chat = state.chats.find(c => c.id === chatId);
+            if (chat) {
+                chat.unreadCount = 0;
+            }
+            const chatMessages = state.messages[chatId];
+            if (chatMessages) {
+                chatMessages.forEach(m => {
+                    if (m.receiverId === action.payload.userId) m.status = 'READ';
+                });
+            }
         },
         markAllAsRead: (state) => {
-            state.chats.forEach(c => { c.unreadCount = 0; });
+            state.chats.forEach(c => {
+                c.unreadCount = 0;
+            });
         },
         clearChat: (state, action: PayloadAction<string>) => {
             state.messages[action.payload] = [];
             const chat = state.chats.find(c => c.id === action.payload);
             if (chat) {
-                chat.lastMessageId = undefined;
+                chat.lastMessage = undefined;
                 chat.unreadCount = 0;
             }
         },
@@ -178,15 +200,22 @@ const chatSlice = createSlice({
 
             const users = message.reactions[emoji] || [];
             if (users.includes(userId)) {
-                // Remove reaction
                 message.reactions[emoji] = users.filter(id => id !== userId);
                 if (message.reactions[emoji].length === 0) {
                     delete message.reactions[emoji];
                 }
             } else {
-                // Add reaction
                 message.reactions[emoji] = [...users, userId];
             }
+        },
+        updatePresence: (state, action: PayloadAction<{ userId: string; isOnline: boolean; lastSeen: string | null }>) => {
+            const { userId, isOnline, lastSeen } = action.payload;
+            state.chats.forEach(chat => {
+                if (chat.otherUser && chat.otherUser.id === userId) {
+                    chat.otherUser.status = isOnline ? 'online' : lastSeen || undefined;
+                    chat.otherUser.lastSeen = lastSeen || undefined;
+                }
+            });
         },
     },
 });
@@ -207,11 +236,12 @@ export const {
     updateChatName,
     exitGroup,
     deleteChats,
-    markAsRead,
+    markAsReadInStore,
     markAllAsRead,
     clearChat,
     addChat,
     toggleReaction,
+    updatePresence,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;

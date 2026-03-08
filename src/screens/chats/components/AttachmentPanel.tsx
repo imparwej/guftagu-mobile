@@ -8,8 +8,9 @@ import {
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-    FadeInUp,
+    FadeInDown,
     FadeOutDown,
+    SlideInDown,
 } from 'react-native-reanimated';
 import { theme } from '../../../theme/theme';
 
@@ -36,7 +37,7 @@ const AttachmentPanel: React.FC<AttachmentPanelProps> = ({
 
     return (
         <Animated.View
-            entering={FadeInUp.duration(280).springify().damping(18).stiffness(180)}
+            entering={SlideInDown.duration(300).springify().damping(20)}
             exiting={FadeOutDown.duration(200)}
             style={styles.container}
         >
@@ -45,7 +46,7 @@ const AttachmentPanel: React.FC<AttachmentPanelProps> = ({
                 {ATTACHMENTS.map((item, index) => (
                     <Animated.View
                         key={item.id}
-                        entering={FadeInUp.delay(index * 50).duration(300).springify()}
+                        entering={FadeInDown.delay(index * 40).duration(400).springify()}
                     >
                         <Pressable
                             style={({ pressed }) => [
