@@ -2,6 +2,7 @@ import {
     LucideCopy,
     LucideCornerUpRight,
     LucideInfo,
+    LucidePencil,
     LucideReply,
     LucideStar,
     LucideTrash2,
@@ -24,6 +25,7 @@ const ACTIONS = [
     { id: 'forward', label: 'Forward', icon: LucideCornerUpRight },
     { id: 'copy', label: 'Copy', icon: LucideCopy },
     { id: 'star', label: 'Star', icon: LucideStar },
+    { id: 'edit', label: 'Edit', icon: LucidePencil },
     { id: 'delete', label: 'Delete', icon: LucideTrash2, destructive: true },
     { id: 'info', label: 'Info', icon: LucideInfo },
 ];

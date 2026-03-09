@@ -19,7 +19,15 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "package": "com.anonymous.guftagumobile"
     },
     "web": {
       "output": "static",
@@ -38,10 +46,18 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-video",
+      "expo-notifications"
     ],
     "experiments": {
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5a88208e-be7e-47c1-879d-054236b4c14d"
+      }
+    },
+    "owner": "parwej7861234"
   }
 }

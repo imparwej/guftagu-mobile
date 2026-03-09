@@ -37,7 +37,7 @@ export interface Message {
     contactName?: string;
     contactPhone?: string;
     voiceDuration?: number;
-    reactions?: Record<string, string[]>;
+    reactions?: Record<string, string>; // userId -> emoji (one per user)
 
     // Link preview fields
     url?: string;
@@ -50,6 +50,14 @@ export interface Message {
 
     // Link metadata from backend
     metadata?: Record<string, string>;
+
+    // Deletion fields
+    deletedFor?: string[];
+    deletedForEveryone?: boolean;
+
+    // Edit fields
+    edited?: boolean;
+    editedAt?: number;
 }
 
 export interface Chat {

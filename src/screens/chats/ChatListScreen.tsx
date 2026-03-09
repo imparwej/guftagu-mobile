@@ -37,7 +37,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useDispatch, useSelector } from 'react-redux';
 import GuftaguLogo from '../../../assets/images/favicon.svg';
-import { getChats, markAsRead } from '../../api/chatApi';
+import { getChats, markAsRead, pinChatApi } from '../../api/chatApi';
 import EmptyState from '../../components/EmptyState';
 import PressableScale from '../../components/PressableScale';
 import Skeleton from '../../components/Skeleton';
@@ -238,6 +238,13 @@ const ChatListScreen = ({ navigation }: any) => {
         switch (action) {
             case 'pin':
                 dispatch(togglePin(ids));
+                if (currentUser?.id) {
+                    ids.forEach(id => {
+                        pinChatApi(id, currentUser.id).catch((err: any) =>
+                            console.warn('Failed to pin chat on server:', err)
+                        );
+                    });
+                }
                 break;
             case 'delete':
                 dispatch(deleteChats(ids));

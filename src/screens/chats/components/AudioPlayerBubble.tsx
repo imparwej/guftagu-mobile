@@ -1,4 +1,4 @@
-import { Audio } from 'expo-av';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { LucidePause, LucidePlay } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -16,84 +16,61 @@ interface AudioPlayerBubbleProps {
 }
 
 const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) => {
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [sound, setSound] = useState<Audio.Sound | null>(null);
-    const [position, setPosition] = useState(0);
-    const [duration, setDuration] = useState(0);
+    const [shouldLoad, setShouldLoad] = useState(false);
+    const player = useAudioPlayer(shouldLoad ? uri : null);
+    const status = useAudioPlayerStatus(player);
 
     const waveAnim = useSharedValue(1);
 
     useEffect(() => {
-        return () => {
-            if (sound) {
-                sound.unloadAsync();
-            }
-        };
-    }, [sound]);
-
-    const playPause = async () => {
-        if (sound) {
-            if (isPlaying) {
-                await sound.pauseAsync();
-                setIsPlaying(false);
-                waveAnim.value = withTiming(1);
-            } else {
-                await sound.playAsync();
-                setIsPlaying(true);
-                startWaveAnimation();
-            }
+        if (status.playing) {
+            waveAnim.value = withRepeat(
+                withSequence(
+                    withTiming(1.5, { duration: 400 }),
+                    withTiming(1, { duration: 400 })
+                ),
+                -1,
+                true
+            );
         } else {
-            try {
-                const { sound: newSound } = await Audio.Sound.createAsync(
-                    { uri },
-                    { shouldPlay: true },
-                    onPlaybackStatusUpdate
-                );
-                setSound(newSound);
-                setIsPlaying(true);
-                startWaveAnimation();
-            } catch (error) {
-                console.error('Error playing audio', error);
-            }
+            waveAnim.value = withTiming(1);
         }
-    };
+    }, [status.playing]);
 
-    const onPlaybackStatusUpdate = (status: any) => {
-        if (status.isLoaded) {
-            setPosition(status.positionMillis);
-            setDuration(status.durationMillis || 0);
+    // Automatically play when loaded if requested
+    useEffect(() => {
+        if (shouldLoad && status.isLoaded && !status.playing && !status.didJustFinish) {
+            // Play automatically when loaded for the first time
+            player.play();
+        }
+    }, [shouldLoad, status.isLoaded]);
+
+    const playPause = () => {
+        if (!shouldLoad) {
+            setShouldLoad(true);
+        } else if (status.playing) {
+            player.pause();
+        } else {
             if (status.didJustFinish) {
-                setIsPlaying(false);
-                setPosition(0);
-                waveAnim.value = withTiming(1);
+                player.seekTo(0);
             }
+            player.play();
         }
     };
 
-    const startWaveAnimation = () => {
-        waveAnim.value = withRepeat(
-            withSequence(
-                withTiming(1.5, { duration: 400 }),
-                withTiming(1, { duration: 400 })
-            ),
-            -1,
-            true
-        );
-    };
-
-    const formatTime = (millis: number) => {
-        const totalSeconds = millis / 1000;
+    const formatTime = (secondsTotal: number) => {
+        const totalSeconds = isNaN(secondsTotal) ? 0 : Math.floor(secondsTotal);
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = Math.floor(totalSeconds % 60);
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    const progress = duration > 0 ? (position / duration) * 100 : 0;
+    const progress = status.duration > 0 ? (status.currentTime / status.duration) * 100 : 0;
 
     return (
         <View style={[styles.container, isMine ? styles.mine : styles.other]}>
             <Pressable onPress={playPause} style={styles.playButton}>
-                {isPlaying ? (
+                {status.playing ? (
                     <LucidePause size={20} color={isMine ? "#000" : "#FFF"} fill={isMine ? "#000" : "#FFF"} />
                 ) : (
                     <LucidePlay size={20} color={isMine ? "#000" : "#FFF"} fill={isMine ? "#000" : "#FFF"} />
@@ -112,7 +89,7 @@ const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) =>
                                     backgroundColor: isMine ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.3)',
                                     opacity: (i / 15) * 100 < progress ? 1 : 0.4
                                 },
-                                isPlaying && {
+                                status.playing && {
                                     height: withRepeat(
                                         withTiming(4 + Math.random() * 16, { duration: 500 }),
                                         -1,
@@ -124,7 +101,7 @@ const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) =>
                     ))}
                 </View>
                 <Text style={[styles.duration, { color: isMine ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.6)' }]}>
-                    {formatTime(isPlaying ? position : duration || 0)}
+                    {formatTime(status.playing ? status.currentTime : status.duration || 0)}
                 </Text>
             </View>
         </View>

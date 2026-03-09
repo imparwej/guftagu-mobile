@@ -2,7 +2,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { LucideCheck, LucideImage, LucideRefreshCcw, LucideX } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { theme } from '../../theme/theme';
 import { triggerShareCallback } from '../../utils/shareCallbacks';
 
@@ -49,6 +49,12 @@ const CameraScreen: React.FC<CameraScreenProps> = ({ navigation, route }) => {
     };
 
     const pickImage = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission Denied', 'We need camera roll permissions to upload images.');
+            return;
+        }
+
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             quality: 0.8,

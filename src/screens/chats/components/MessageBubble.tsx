@@ -441,6 +441,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
 
                     {/* Time + status */}
                     <View style={styles.footer}>
+                        {message.edited && (
+                            <Text style={[styles.time, { color: isMine ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.28)', fontStyle: 'italic', marginRight: 4 }]}>
+                                (edited)
+                            </Text>
+                        )}
                         <Text style={[styles.time, { color: isMine ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.35)' }]}>
                             {formatTime(message.timestamp)}
                         </Text>
@@ -453,12 +458,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                             styles.reactionsContainer,
                             isMine ? styles.reactionsMine : styles.reactionsOther
                         ]}>
-                            {Object.entries(message.reactions).map(([emoji, users]) => (
-                                <View key={emoji} style={styles.reactionBadge}>
-                                    <Text style={styles.reactionText}>{emoji}</Text>
-                                    <Text style={styles.reactionCount}>{users.length}</Text>
-                                </View>
-                            ))}
+                            {(() => {
+                                // Group by emoji: {emoji: count}
+                                const emojiCounts: Record<string, number> = {};
+                                Object.values(message.reactions!).forEach((emoji: string) => {
+                                    emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+                                });
+                                return Object.entries(emojiCounts).map(([emoji, count]) => (
+                                    <View key={emoji} style={styles.reactionBadge}>
+                                        <Text style={styles.reactionText}>{emoji}</Text>
+                                        <Text style={styles.reactionCount}>{count}</Text>
+                                    </View>
+                                ));
+                            })()}
                         </View>
                     )}
                 </PressableScale>

@@ -11,9 +11,10 @@ export const getChats = async (userId: string, token?: string) => {
     }
 };
 
-export const getMessages = async (conversationId: string, token?: string) => {
+export const getMessages = async (conversationId: string, userId?: string, token?: string) => {
     try {
         const response = await apiClient.get(`/messages/${conversationId}`, {
+            params: userId ? { userId } : {},
             headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         return response.data;
@@ -80,6 +81,9 @@ export const uploadFile = async (
             headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'multipart/form-data',
+            },
+            transformRequest: (data) => {
+                return data; // Prevent Axios from stringifying FormData in React Native
             },
             onUploadProgress: (progressEvent) => {
                 if (onUploadProgress && progressEvent.total) {
@@ -185,5 +189,46 @@ export const getStarredMessagesApi = async (userId: string) => {
         return response.data;
     } catch (error: any) {
         throw error.response?.data || error.message;
+    }
+};
+
+// ──────── REACT TO MESSAGE ────────
+export const reactToMessage = async (messageId: string, userId: string, reaction: string) => {
+    try {
+        const response = await apiClient.post('/messages/react', { messageId, userId, reaction });
+        return response.data;
+    } catch (error: any) {
+        throw error.response?.data || error.message;
+    }
+};
+
+// ──────── EDIT MESSAGE ────────
+export const editMessageApi = async (messageId: string, newContent: string) => {
+    try {
+        const response = await apiClient.put('/messages/edit', { messageId, newContent });
+        return response.data;
+    } catch (error: any) {
+        throw error.response?.data || error.message;
+    }
+};
+
+// ──────── PIN CHAT ────────
+export const pinChatApi = async (conversationId: string, userId: string) => {
+    try {
+        const response = await apiClient.post('/chats/pin', { conversationId, userId });
+        return response.data;
+    } catch (error: any) {
+        throw error.response?.data || error.message;
+    }
+};
+
+// ──────── DEVICE TOKEN ────────
+export const updateDeviceTokenApi = async (userId: string, token: string) => {
+    try {
+        const response = await apiClient.post('/users/device-token', { userId, token });
+        return response.data;
+    } catch (error: any) {
+        console.warn('Device token update failed:', error);
+        return { error: true, message: error.message };
     }
 };

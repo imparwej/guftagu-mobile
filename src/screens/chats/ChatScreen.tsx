@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
-import { blockUser as blockUserApi, clearChatForUser, deleteMessageApi, getLinkPreview, getMessages, markAsRead, toggleStarMessageApi, unblockUser as unblockUserApi, uploadFile } from '../../api/chatApi';
+import { blockUser as blockUserApi, clearChatForUser, deleteMessageApi, editMessageApi, getLinkPreview, getMessages, markAsRead, reactToMessage, toggleStarMessageApi, unblockUser as unblockUserApi, uploadFile } from '../../api/chatApi';
 import { API_BASE_URL } from '../../config/api';
 import { chatSocketService } from '../../socket/chatSocket';
 import {
@@ -33,7 +33,8 @@ import {
     starMessage,
     toggleMute,
     toggleReaction,
-    unblockChat
+    unblockChat,
+    updateMessage,
 } from '../../store/slices/chatSlice';
 import { RootState, store } from '../../store/store';
 import { theme } from '../../theme/theme';
@@ -88,6 +89,7 @@ const ChatScreen = ({ navigation, route }: any) => {
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [isOffline, setIsOffline] = useState(false);
+    const [editingMessage, setEditingMessage] = useState<Message | null>(null);
 
     const dispatch = useDispatch();
     const { activeChatId, chats, messages } = useSelector((state: RootState) => state.chat);
@@ -116,7 +118,7 @@ const ChatScreen = ({ navigation, route }: any) => {
         const loadMessages = async () => {
             if (activeChatId) {
                 try {
-                    const data = await getMessages(activeChatId);
+                    const data = await getMessages(activeChatId, currentUser?.id);
                     dispatch(setMessages({ chatId: activeChatId, messages: data }));
                 } catch (error) {
                     console.error('Failed to load messages:', error);
@@ -178,6 +180,14 @@ const ChatScreen = ({ navigation, route }: any) => {
         if (!currentUser?.id) return;
 
         const handleIncomingMessage = (message: Message) => {
+            // Check if this message already exists (edit/reaction update)
+            const existing = store.getState().chat.messages[message.conversationId];
+            if (existing && existing.find((m: Message) => m.id === message.id)) {
+                // Update existing message in-place (for edits, reactions, etc.)
+                dispatch(updateMessage(message));
+                return;
+            }
+
             dispatch(addMessage(message));
 
             // Auto-save received media
@@ -305,6 +315,24 @@ const ChatScreen = ({ navigation, route }: any) => {
 
     const handleSendText = useCallback(() => {
         if (!text.trim() || isBlocked || !currentUser?.id) return;
+
+        // Edit mode: update existing message instead of sending new
+        if (editingMessage) {
+            editMessageApi(editingMessage.id, text.trim())
+                .then((updatedMsg: any) => {
+                    if (updatedMsg && activeChatId) {
+                        dispatch(updateMessage(updatedMsg));
+                    }
+                })
+                .catch((err: any) => {
+                    console.warn('Edit failed:', err);
+                    Alert.alert('Error', 'Failed to edit message.');
+                });
+            setEditingMessage(null);
+            setText('');
+            return;
+        }
+
         sendMessage();
         const receiverId = otherUser?.id
             || displayChat?.otherUser?.id
@@ -394,7 +422,7 @@ const ChatScreen = ({ navigation, route }: any) => {
                                 try {
                                     await clearChatForUser(activeChatId, currentUser.id);
                                     dispatch(setMessages({ chatId: activeChatId, messages: [] }));
-                                } catch (err) {
+                                } catch (err: any) {
                                     console.warn('Failed to clear chat on server:', err);
                                 }
                             }
@@ -406,7 +434,7 @@ const ChatScreen = ({ navigation, route }: any) => {
                 if (isBlocked) {
                     const targetUserId = otherUser?.id || displayChat?.otherUser?.id;
                     if (currentUser?.id && targetUserId) {
-                        unblockUserApi(currentUser.id, targetUserId).catch(err =>
+                        unblockUserApi(currentUser.id, targetUserId).catch((err: any) =>
                             console.warn('Failed to unblock on server:', err)
                         );
                     }
@@ -419,7 +447,7 @@ const ChatScreen = ({ navigation, route }: any) => {
                             text: 'Block', style: 'destructive', onPress: () => {
                                 const targetUserId = otherUser?.id || displayChat?.otherUser?.id;
                                 if (currentUser?.id && targetUserId) {
-                                    blockUserApi(currentUser.id, targetUserId).catch(err =>
+                                    blockUserApi(currentUser.id, targetUserId).catch((err: any) =>
                                         console.warn('Failed to block on server:', err)
                                     );
                                 }
@@ -527,7 +555,22 @@ const ChatScreen = ({ navigation, route }: any) => {
                         userId: currentUser?.id || 'me',
                         emoji
                     }));
+                    // Call API to persist reaction
+                    reactToMessage(longPressMessage.id, currentUser?.id || 'me', emoji).catch(err =>
+                        console.warn('Failed to save reaction:', err)
+                    );
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                } else if (action === 'edit') {
+                    // Edit message — only if within 15 minutes
+                    if (longPressMessage.senderId === currentUser?.id) {
+                        const fifteenMins = 15 * 60 * 1000;
+                        if (Date.now() - longPressMessage.timestamp < fifteenMins) {
+                            setEditingMessage(longPressMessage);
+                            setText(longPressMessage.content || '');
+                        } else {
+                            Alert.alert('Cannot Edit', 'Messages can only be edited within 15 minutes of sending.');
+                        }
+                    }
                 }
                 break;
         }
@@ -544,6 +587,11 @@ const ChatScreen = ({ navigation, route }: any) => {
 
         switch (type) {
             case 'gallery': {
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Permission Denied', 'We need camera roll permissions to upload images.');
+                    return;
+                }
                 const result = await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: ['images'],
                     quality: 0.8,

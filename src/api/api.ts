@@ -10,6 +10,8 @@ const apiClient = axios.create({
     }
 });
 
+console.log("API URL:", API_BASE_URL);
+
 // Add a request interceptor
 apiClient.interceptors.request.use(
     (config) => {
@@ -28,6 +30,7 @@ apiClient.interceptors.request.use(
 export const sendOtp = async (phoneNumber: string) => {
     try {
         const response = await apiClient.post('/auth/send-otp', { phoneNumber });
+        console.log("OTP RESPONSE:", response);
         return response.data;
     } catch (error: any) {
         throw error.response?.data || error.message;
@@ -37,6 +40,7 @@ export const sendOtp = async (phoneNumber: string) => {
 export const verifyOtp = async (phoneNumber: string, otp: string) => {
     try {
         const response = await apiClient.post('/auth/verify-otp', { phoneNumber, otp });
+        console.log("OTP RESPONSE:", response);
         return response.data;
     } catch (error: any) {
         throw error.response?.data || error.message;

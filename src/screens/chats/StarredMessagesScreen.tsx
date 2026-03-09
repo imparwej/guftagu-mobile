@@ -54,7 +54,7 @@ const StarredMessagesScreen = () => {
 
             {loading ? (
                 <View style={styles.loaderContainer}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
+                    <ActivityIndicator size="large" color={theme.colors.accent} />
                 </View>
             ) : (
                 <FlatList

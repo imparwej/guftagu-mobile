@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Camera } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+    Alert,
     Dimensions,
     Image,
     Keyboard,
@@ -156,6 +157,11 @@ const CreateProfileScreen = ({ navigation }: any) => {
     // ── Image picker
     const pickImage = async () => {
         try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'We need camera roll permissions to upload images.');
+                return;
+            }
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ['images'],
                 allowsEditing: true,

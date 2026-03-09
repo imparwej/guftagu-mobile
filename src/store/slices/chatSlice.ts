@@ -23,6 +23,7 @@ const chatSlice = createSlice({
                 lastMessage: item.lastMessage,
                 lastMessageTime: item.lastMessageTime,
                 unreadCount: item.unreadCount,
+                isPinned: item.pinned ?? item.isPinned ?? false,
                 otherUser: {
                     id: item.otherUserId,
                     name: item.otherUserName,
@@ -198,14 +199,22 @@ const chatSlice = createSlice({
                 message.reactions = {};
             }
 
-            const users = message.reactions[emoji] || [];
-            if (users.includes(userId)) {
-                message.reactions[emoji] = users.filter(id => id !== userId);
-                if (message.reactions[emoji].length === 0) {
-                    delete message.reactions[emoji];
-                }
+            // userId -> emoji map: toggle same emoji, or set new one
+            if (message.reactions[userId] === emoji) {
+                delete message.reactions[userId];
             } else {
-                message.reactions[emoji] = [...users, userId];
+                message.reactions[userId] = emoji;
+            }
+        },
+        // Update a message in-place (used for edits, reactions from WebSocket)
+        updateMessage: (state, action: PayloadAction<Message>) => {
+            const updatedMsg = action.payload;
+            const chatMessages = state.messages[updatedMsg.conversationId];
+            if (chatMessages) {
+                const idx = chatMessages.findIndex(m => m.id === updatedMsg.id);
+                if (idx !== -1) {
+                    chatMessages[idx] = updatedMsg;
+                }
             }
         },
         updatePresence: (state, action: PayloadAction<{ userId: string; isOnline: boolean; lastSeen: string | null }>) => {
@@ -241,6 +250,7 @@ export const {
     clearChat,
     addChat,
     toggleReaction,
+    updateMessage,
     updatePresence,
 } = chatSlice.actions;
 

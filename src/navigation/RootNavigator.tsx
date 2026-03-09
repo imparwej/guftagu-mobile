@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { useSelector } from 'react-redux';
+import { updateDeviceTokenApi } from '../api/chatApi';
 import SplashScreen from '../screens/Splash';
 import CreateProfileScreen from '../screens/auth/CreateProfileScreen';
 import OtpScreen from '../screens/auth/OtpScreen';
@@ -22,6 +23,7 @@ import UserInfoScreen from '../screens/chats/UserInfoScreen';
 import LinkedDevicesScreen from '../screens/devices/LinkedDevicesScreen';
 import StatusViewerScreen from '../screens/status/StatusViewerScreen';
 import { RootState } from '../store/store';
+import { registerForPushNotificationsAsync } from '../utils/pushNotifications';
 import TabNavigator from './TabNavigator';
 
 const Stack = createNativeStackNavigator();
@@ -39,6 +41,19 @@ const RootNavigator = () => {
 
     // Ensure we always have a stable boolean
     const isFullyOnboarded = !!(isAuthenticated && profileCompleted);
+    const currentUser = useSelector((state: RootState) => state.auth.user);
+
+    React.useEffect(() => {
+        if (isFullyOnboarded && currentUser?.id) {
+            registerForPushNotificationsAsync().then(token => {
+                if (token) {
+                    updateDeviceTokenApi(currentUser.id, token).catch((err: any) =>
+                        console.warn('Failed to register device token:', err)
+                    );
+                }
+            });
+        }
+    }, [isFullyOnboarded, currentUser?.id]);
 
     return (
         <Stack.Navigator
