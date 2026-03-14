@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import { LucideMapPin, LucideX } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import LocationMap from './LocationMap';
 import { theme } from '../../theme/theme';
 import { triggerShareCallback } from '../../utils/shareCallbacks';
 
@@ -30,8 +30,6 @@ const LocationShareScreen: React.FC<LocationShareScreenProps> = ({ navigation, r
             setRegion({
                 latitude: loc.coords.latitude,
                 longitude: loc.coords.longitude,
-                latitudeDelta: 0.005,
-                longitudeDelta: 0.005,
             });
         })();
     }, []);
@@ -46,15 +44,17 @@ const LocationShareScreen: React.FC<LocationShareScreenProps> = ({ navigation, r
         }
     };
 
-    const shareLiveLocation = (duration: number) => {
-        if (location && callbackId) {
-            triggerShareCallback(callbackId, {
-                lat: location.coords.latitude,
-                lng: location.coords.longitude,
-                live: true,
-                duration,
-            });
-            navigation.goBack();
+    const shareLiveLocation = async (durationInMins: number) => {
+        if (location) {
+            const { LocationService } = require('../../services/locationService');
+            const conversationId = route.params?.conversationId; // Assume passed in params
+            
+            if (conversationId) {
+                await LocationService.startSharing(conversationId, durationInMins * 60);
+                navigation.goBack();
+            } else {
+                Alert.alert('Error', 'Conversation ID not found');
+            }
         }
     };
 
@@ -69,14 +69,11 @@ const LocationShareScreen: React.FC<LocationShareScreenProps> = ({ navigation, r
             </View>
 
             {region ? (
-                <MapView
+                <LocationMap
+                    latitude={region.latitude}
+                    longitude={region.longitude}
                     style={styles.map}
-                    initialRegion={region}
-                    showsUserLocation
-                    onRegionChangeComplete={setRegion}
-                >
-                    <Marker coordinate={region} />
-                </MapView>
+                />
             ) : (
                 <View style={[styles.map, styles.center]}>
                     <Text style={{ color: '#FFF' }}>Loading Map...</Text>

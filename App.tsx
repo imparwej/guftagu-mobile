@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Provider } from 'react-redux';
 import RootNavigator from './src/navigation/RootNavigator';
 import { store } from './src/store/store';
+import './src/services/locationService';
 
 export default function App() {
     return (

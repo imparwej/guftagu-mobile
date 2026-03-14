@@ -18,7 +18,7 @@ export interface Message {
     conversationId: string;
     senderId: string;
     receiverId: string;
-    type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'LOCATION' | 'CONTACT' | 'GIF' | 'LINK';
+    type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'LOCATION' | 'LIVE_LOCATION' | 'CONTACT' | 'GIF' | 'LINK';
     content: string;
     mediaUrl?: string;
     mediaUri?: string; // UI local uri

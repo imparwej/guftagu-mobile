@@ -77,7 +77,7 @@ class ChatSocketService {
                     }
 
                     // Validate message type if it's a chat message
-                    const VALID_TYPES = ['TEXT', 'IMAGE', 'AUDIO', 'DOCUMENT', 'LOCATION', 'CONTACT', 'GIF', 'LINK'];
+                    const VALID_TYPES = ['TEXT', 'IMAGE', 'AUDIO', 'DOCUMENT', 'LOCATION', 'LIVE_LOCATION', 'CONTACT', 'GIF', 'LINK'];
                     if (parsed.type && !VALID_TYPES.includes(parsed.type)) {
                         console.warn('Unknown message type received:', parsed.type, '— treating as TEXT');
                         parsed.type = 'TEXT';

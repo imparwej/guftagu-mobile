@@ -40,6 +40,7 @@ import { RootState, store } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Message } from '../../types';
 import { registerShareCallback } from '../../utils/shareCallbacks';
+import { liveLocationService } from '../../services/LiveLocationService';
 import AttachmentPanel from './components/AttachmentPanel';
 import ChatHeader from './components/ChatHeader';
 import ChatHeaderMenu from './components/ChatHeaderMenu';
@@ -643,11 +644,27 @@ const ChatScreen = ({ navigation, route }: any) => {
                 break;
             }
             case 'location': {
-                const locationCallbackId = registerShareCallback((data: any) => {
-                    sendMessage({
-                        type: 'LOCATION',
-                        content: JSON.stringify(data),
-                    });
+                const locationCallbackId = registerShareCallback(async (data: any) => {
+                    if (data.live && currentUser?.id) {
+                        sendMessage({
+                            type: 'LIVE_LOCATION',
+                            content: JSON.stringify(data),
+                            latitude: data.lat,
+                            longitude: data.lng,
+                            expiresAt: Date.now() + data.duration * 60 * 1000
+                        });
+                        const started = await liveLocationService.startSharing(activeChatId || '', currentUser.id, data.duration);
+                        if (!started) {
+                            Alert.alert("Permission Required", "Location permissions are required to share live location.");
+                        }
+                    } else {
+                        sendMessage({
+                            type: 'LOCATION',
+                            content: JSON.stringify(data),
+                            latitude: data.lat,
+                            longitude: data.lng
+                        });
+                    }
                 });
                 navigation.navigate('LocationShare', { callbackId: locationCallbackId });
                 break;

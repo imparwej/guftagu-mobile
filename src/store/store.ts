@@ -5,6 +5,7 @@ import chatReducer from './slices/chatSlice';
 import deviceReducer from './slices/deviceSlice';
 import settingsReducer from './slices/settingsSlice';
 import statusReducer from './slices/statusSlice';
+import locationReducer from './slices/locationSlice';
 
 export const store = configureStore({
     reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
         call: callReducer,
         devices: deviceReducer,
         settings: settingsReducer,
+        location: locationReducer,
     },
 });
 

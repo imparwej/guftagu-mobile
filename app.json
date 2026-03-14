@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "guftagumobile",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },
@@ -30,7 +30,7 @@
       "package": "com.anonymous.guftagumobile"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -48,7 +48,8 @@
       ],
       "expo-audio",
       "expo-video",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-location"
     ],
     "experiments": {
       "reactCompiler": true

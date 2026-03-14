@@ -22,6 +22,7 @@ import { RootState } from '../../../store/store';
 import { theme } from '../../../theme/theme';
 import { Message } from '../../../types';
 import AudioPlayerBubble from './AudioPlayerBubble';
+import LiveLocationBubble from './LiveLocationBubble';
 
 interface MessageBubbleProps {
     message: Message;
@@ -217,6 +218,9 @@ const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message
                     </Text>
                 </PressableScale>
             );
+        }
+        case 'LIVE_LOCATION': {
+            return <LiveLocationBubble message={message} isMine={isMine} />;
         }
         case 'CONTACT': {
             let contactData = null;
@@ -417,7 +421,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                     {message.type !== 'TEXT' && <MediaContent message={message} isMine={isMine} />}
 
                     {/* Text content - skip for media-only types that use text differently */}
-                    {message.content && !['LOCATION', 'CONTACT', 'AUDIO', 'GIF', 'LINK'].includes(message.type || '') && (
+                    {message.content && !['LOCATION', 'LIVE_LOCATION', 'CONTACT', 'AUDIO', 'GIF', 'LINK'].includes(message.type || '') && (
                         <Text
                             style={[
                                 styles.text,
