@@ -1,26 +1,28 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
-export interface LiveLocationData {
+export interface UserLocation {
     userId: string;
     latitude: number;
     longitude: number;
     timestamp: number;
-    avatar?: string;
-    name?: string;
     conversationId: string;
+    name?: string;
+    avatar?: string;
 }
 
 interface LocationState {
-    activeSharing: {
+    activeLiveLocation: {
         conversationId: string;
         expiresAt: number;
     } | null;
-    buddyLocations: Record<string, LiveLocationData>; // userId -> data
+    userLocations: Record<string, UserLocation>; // userId -> data
+    locationHistory: Record<string, Array<{ latitude: number; longitude: number }>>; // userId -> points
 }
 
 const initialState: LocationState = {
-    activeSharing: null,
-    buddyLocations: {},
+    activeLiveLocation: null,
+    userLocations: {},
+    locationHistory: {},
 };
 
 const locationSlice = createSlice({
@@ -28,25 +30,34 @@ const locationSlice = createSlice({
     initialState,
     reducers: {
         startSharing: (state, action: PayloadAction<{ conversationId: string; expiresAt: number }>) => {
-            state.activeSharing = action.payload;
+            state.activeLiveLocation = action.payload;
         },
         stopSharing: (state) => {
-            state.activeSharing = null;
+            state.activeLiveLocation = null;
         },
-        updateBuddyLocation: (state, action: PayloadAction<LiveLocationData>) => {
-            state.buddyLocations[action.payload.userId] = action.payload;
+        updateUserLocation: (state, action: PayloadAction<UserLocation>) => {
+            const { userId, latitude, longitude } = action.payload;
+            state.userLocations[userId] = action.payload;
+            
+            // Update history
+            if (!state.locationHistory[userId]) {
+                state.locationHistory[userId] = [];
+            }
+            state.locationHistory[userId].push({ latitude, longitude });
+            
+            // Limit history size to 50 points for performance
+            if (state.locationHistory[userId].length > 50) {
+                state.locationHistory[userId].shift();
+            }
         },
-        clearBuddyLocations: (state, action: PayloadAction<string>) => {
-            // Clear locations for a specific conversation
+        clearUserLocations: (state, action: PayloadAction<string>) => {
             const conversationId = action.payload;
-            Object.keys(state.buddyLocations).forEach(userId => {
-                if (state.buddyLocations[userId].conversationId === conversationId) {
-                    delete state.buddyLocations[userId];
+            Object.keys(state.userLocations).forEach(userId => {
+                if (state.userLocations[userId].conversationId === conversationId) {
+                    delete state.userLocations[userId];
+                    delete state.locationHistory[userId];
                 }
             });
-        },
-        removeBuddyLocation: (state, action: PayloadAction<string>) => {
-            delete state.buddyLocations[action.payload];
         }
     },
 });
@@ -54,9 +65,8 @@ const locationSlice = createSlice({
 export const { 
     startSharing, 
     stopSharing, 
-    updateBuddyLocation, 
-    clearBuddyLocations, 
-    removeBuddyLocation 
+    updateUserLocation, 
+    clearUserLocations 
 } = locationSlice.actions;
 
 export default locationSlice.reducer;

@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
 import { blockUser as blockUserApi, clearChatForUser, deleteMessageApi, editMessageApi, getLinkPreview, getMessages, markAsRead, reactToMessage, toggleStarMessageApi, unblockUser as unblockUserApi, uploadFile } from '../../api/chatApi';
 import { API_BASE_URL } from '../../config/api';
+import { liveLocationService } from '../../services/LiveLocationService';
 import { chatSocketService } from '../../socket/chatSocket';
 import {
     addMessage,
@@ -40,7 +41,6 @@ import { RootState, store } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Message } from '../../types';
 import { registerShareCallback } from '../../utils/shareCallbacks';
-import { liveLocationService } from '../../services/LiveLocationService';
 import AttachmentPanel from './components/AttachmentPanel';
 import ChatHeader from './components/ChatHeader';
 import ChatHeaderMenu from './components/ChatHeaderMenu';
@@ -214,9 +214,15 @@ const ChatScreen = ({ navigation, route }: any) => {
             }
         };
 
-        // Subscribe (ChatListScreen may already have a sub, but ChatScreen needs its own
-        // handler for scroll and new-chat detection)
-        const messageSub = chatSocketService.subscribe('/user/queue/messages', handleIncomingMessage);
+        // Subscribe to the specific conversation topic for real-time messages
+        // If conversationId is 'new' or null, we might still rely on /user/queue/messages for the first message
+        const subPath = activeChatId ? `/topic/messages/${activeChatId}` : '/user/queue/messages';
+        const messageSub = chatSocketService.subscribe(subPath, handleIncomingMessage);
+
+        // Also keep listening to /user/queue/messages for new chats or fallback
+        if (activeChatId) {
+            chatSocketService.subscribe('/user/queue/messages', handleIncomingMessage);
+        }
 
         // Typing indicator
         let typingSub: any;
@@ -229,6 +235,7 @@ const ChatScreen = ({ navigation, route }: any) => {
         }
 
         return () => {
+            chatSocketService.unsubscribe(subPath);
             chatSocketService.unsubscribe('/user/queue/messages');
             if (activeChatId) chatSocketService.unsubscribe('/user/queue/typing');
         };
@@ -299,6 +306,10 @@ const ChatScreen = ({ navigation, route }: any) => {
         delete messagePayload.status;
         delete messagePayload.replyTo;
         delete messagePayload.mediaUri;
+
+        if (finalType === 'LIVE_LOCATION' || finalType === 'LOCATION') {
+            console.log(`[ChatScreen] Sending ${finalType} message:`, messagePayload);
+        }
 
         try {
             chatSocketService.sendChatMessage(messagePayload);
@@ -590,19 +601,23 @@ const ChatScreen = ({ navigation, route }: any) => {
             case 'gallery': {
                 const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                 if (status !== 'granted') {
-                    Alert.alert('Permission Denied', 'We need camera roll permissions to upload images.');
+                    Alert.alert('Permission Denied', 'We need camera roll permissions to upload media.');
                     return;
                 }
                 const result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ['images'],
+                    mediaTypes: ImagePicker.MediaTypeOptions.All, // Support images and videos
                     quality: 0.8,
                 });
                 if (!result.canceled && result.assets?.[0]) {
-                    const uploadResult = await uploadFile('image', result.assets[0].uri, token);
+                    const asset = result.assets[0];
+                    const isVideo = asset.type === 'video';
+                    const uploadResult = await uploadFile(isVideo ? 'video' : 'image', asset.uri, token);
                     sendMessage({
-                        type: 'IMAGE',
+                        type: isVideo ? 'VIDEO' : 'IMAGE',
                         mediaUrl: uploadResult.url,
-                        mediaUri: result.assets[0].uri,
+                        mediaUri: asset.uri,
+                        fileName: asset.fileName || undefined,
+                        fileSize: asset.fileSize || undefined,
                     });
                 }
                 break;
@@ -630,12 +645,13 @@ const ChatScreen = ({ navigation, route }: any) => {
                         const uploadResult = await uploadFile('document', doc.uri, token, (progress) => {
                             console.log(`Document upload progress: ${progress}%`);
                         });
+                        // Use DOCUMENT instead of FILE as per new requirements
                         sendMessage({
                             type: 'DOCUMENT',
                             mediaUrl: uploadResult.url,
                             content: doc.name || 'Document',
                             fileName: doc.name || 'document',
-                            fileSize: doc.size ? `${(doc.size / 1024).toFixed(1)} KB` : undefined,
+                            fileSize: doc.size || undefined,
                         });
                     }
                 } catch (err) {
@@ -653,7 +669,7 @@ const ChatScreen = ({ navigation, route }: any) => {
                             longitude: data.lng,
                             expiresAt: Date.now() + data.duration * 60 * 1000
                         });
-                        const started = await liveLocationService.startSharing(activeChatId || '', currentUser.id, data.duration);
+                        const started = await liveLocationService.startLiveSharing(activeChatId || '', currentUser.id, data.duration);
                         if (!started) {
                             Alert.alert("Permission Required", "Location permissions are required to share live location.");
                         }
@@ -666,7 +682,7 @@ const ChatScreen = ({ navigation, route }: any) => {
                         });
                     }
                 });
-                navigation.navigate('LocationShare', { callbackId: locationCallbackId });
+                navigation.navigate('Location', { callbackId: locationCallbackId });
                 break;
             }
             case 'contact': {
@@ -713,22 +729,20 @@ const ChatScreen = ({ navigation, route }: any) => {
         const token = store.getState().auth.token;
         if (!token || !uri) return;
 
-        // Optimistic UI for progress could be added here, but for now just send
         try {
-            const uploadResult = await uploadFile('audio', uri, token, (progress) => {
-                console.log(`Audio upload progress: ${progress}%`);
-                // We could set an upload progress state here to show in UI
+            const uploadResult = await uploadFile('voice', uri, token, (progress) => {
+                console.log(`Voice upload progress: ${progress}%`);
             });
 
             sendMessage({
-                type: 'AUDIO',
+                type: 'VOICE',
                 mediaUrl: uploadResult.url,
-                content: `Audio (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
+                content: `Voice message (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
                 voiceDuration: duration,
             });
         } catch (err) {
-            console.error('Audio upload failed:', err);
-            Alert.alert('Error', 'Could not upload audio recording.');
+            console.error('Voice upload failed:', err);
+            Alert.alert('Error', 'Could not upload voice recording.');
         }
     }, [sendMessage]);
 

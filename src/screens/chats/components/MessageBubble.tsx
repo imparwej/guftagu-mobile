@@ -8,11 +8,18 @@ import {
     LucideDownload,
     LucideFile,
     LucideMapPin,
+    LucidePause,
+    LucidePlay,
     LucideStar,
-    LucideUser
+    LucideUser,
+    LucidePhone,
+    LucideX
 } from 'lucide-react-native';
-import React, { useCallback, useMemo } from 'react';
-import { Alert, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import * as Audio from 'expo-audio';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
+import { Alert, Image, Linking, Pressable, StyleSheet, Text, View, Platform, Modal } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import Animated, { FadeIn, Layout as LayoutAnim } from 'react-native-reanimated';
 import { useSelector } from 'react-redux';
@@ -22,7 +29,7 @@ import { RootState } from '../../../store/store';
 import { theme } from '../../../theme/theme';
 import { Message } from '../../../types';
 import AudioPlayerBubble from './AudioPlayerBubble';
-import LiveLocationBubble from './LiveLocationBubble';
+import LocationMessageBubble from './LocationMessageBubble';
 
 interface MessageBubbleProps {
     message: Message;
@@ -58,13 +65,6 @@ const formatTime = (timestamp: number) => {
     });
 };
 
-const formatDuration = (seconds?: number) => {
-    if (!seconds) return '0:00';
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    return `${min}:${sec.toString().padStart(2, '0')}`;
-};
-
 const StatusTicks = ({ message }: { message: Message }) => {
     if (message.seen) {
         return <Text style={[styles.tick, { color: '#34A0FF' }]}>✓✓</Text>;
@@ -72,8 +72,63 @@ const StatusTicks = ({ message }: { message: Message }) => {
     if (message.delivered) {
         return <Text style={[styles.tick, { color: 'rgba(0,0,0,0.35)' }]}>✓✓</Text>;
     }
-    // Sent but not yet delivered
     return <Text style={[styles.tick, { color: 'rgba(0,0,0,0.35)' }]}>✓</Text>;
+};
+
+const VideoBubble: React.FC<{ uri: string; isMine: boolean; onExpand: () => void }> = ({ uri, isMine, onExpand }) => {
+    const [fullScreen, setFullScreen] = useState(false);
+    const player = useVideoPlayer(uri, (player) => {
+        player.loop = true;
+        player.muted = false;
+    });
+
+    const handlePress = () => {
+        setFullScreen(true);
+        player.play();
+    };
+
+    const handleClose = () => {
+        player.pause();
+        setFullScreen(false);
+    };
+
+    return (
+        <View>
+            <Pressable onPress={handlePress} style={styles.videoContainer}>
+                <VideoView
+                    player={player}
+                    contentFit="cover"
+                    style={styles.inlineVideo}
+                    nativeControls={false}
+                />
+                <View style={styles.videoOverlay}>
+                    <View style={styles.playOverlay}>
+                        <LucidePlay size={24} color="#FFF" fill="#FFF" />
+                    </View>
+                </View>
+            </Pressable>
+
+            <Modal
+                visible={fullScreen}
+                transparent={false}
+                animationType="fade"
+                onRequestClose={handleClose}
+            >
+                <View style={styles.fullScreenVideoContainer}>
+                    <VideoView
+                        player={player}
+                        allowsFullscreen
+                        allowsPictureInPicture
+                        contentFit="contain"
+                        style={styles.fullScreenVideo}
+                    />
+                    <Pressable onPress={handleClose} style={styles.closeBtn}>
+                        <LucideX color="#FFF" size={30} />
+                    </Pressable>
+                </View>
+            </Modal>
+        </View>
+    );
 };
 
 const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message, isMine }) => {
@@ -83,8 +138,15 @@ const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message
     const iconColor = isMine ? 'rgba(0,0,0,0.6)' : theme.colors.text.secondary;
     const mediaUrl = useMemo(() => {
         if (message.mediaUrl) {
-            if (message.mediaUrl.startsWith('http://') || message.mediaUrl.startsWith('https://')) {
-                return message.mediaUrl;
+            let url = message.mediaUrl;
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+                if (__DEV__ && url.includes('localhost')) {
+                    const hostPart = API_BASE_URL.split('://')[1]?.split(':')[0];
+                    if (hostPart && hostPart !== 'localhost') {
+                        url = url.replace('localhost', hostPart);
+                    }
+                }
+                return url;
             }
             return `${API_BASE_URL}${message.mediaUrl}`;
         }
@@ -122,26 +184,37 @@ const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message
                 uri: mediaUrl,
                 type: message.type
             });
-        } else if (message.type === 'DOCUMENT' && mediaUrl) {
-            // Download file locally then open with share sheet
-            try {
-                const filename = message.fileName || mediaUrl.split('/').pop() || `file_${Date.now()}`;
-                const localUri = `${FileSystem.cacheDirectory}${filename}`;
+        } else if (message.type === 'VIDEO') {
+            navigation.navigate('MediaPreview', {
+                uri: mediaUrl,
+                type: 'VIDEO'
+            });
+        } else if ((message.type === 'DOCUMENT' || message.type === 'FILE') && mediaUrl) {
+            if (mediaUrl.startsWith('http')) {
+                Linking.openURL(mediaUrl).catch(err => {
+                    console.error('Failed to open URL:', err);
+                    Alert.alert('Error', 'Could not open document.');
+                });
+            } else {
+                try {
+                    const filename = message.fileName || mediaUrl.split('/').pop() || `file_${Date.now()}`;
+                    const localUri = `${FileSystem.cacheDirectory}${filename}`;
 
-                const downloadResult = await FileSystem.downloadAsync(mediaUrl, localUri);
-                if (downloadResult.status === 200) {
-                    const isAvailable = await Sharing.isAvailableAsync();
-                    if (isAvailable) {
-                        await Sharing.shareAsync(downloadResult.uri);
+                    const downloadResult = await FileSystem.downloadAsync(mediaUrl, localUri);
+                    if (downloadResult.status === 200) {
+                        const isAvailable = await Sharing.isAvailableAsync();
+                        if (isAvailable) {
+                            await Sharing.shareAsync(downloadResult.uri);
+                        } else {
+                            Alert.alert('Error', 'Sharing is not available on this device.');
+                        }
                     } else {
-                        Alert.alert('Error', 'Sharing is not available on this device.');
+                        Alert.alert('Error', 'Failed to download the file.');
                     }
-                } else {
-                    Alert.alert('Error', 'Failed to download the file.');
+                } catch (err) {
+                    console.error('File open failed:', err);
+                    Alert.alert('Error', 'Could not open the file.');
                 }
-            } catch (err) {
-                console.error('File open failed:', err);
-                Alert.alert('Error', 'Could not open the file.');
             }
         }
     }, [message.type, message.fileName, mediaUrl, navigation]);
@@ -152,127 +225,101 @@ const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message
                 {mediaUrl ? (
                     <Image
                         source={{ uri: mediaUrl }}
-                        style={styles.image}
+                        style={styles.chatImage}
                         resizeMode="cover"
                     />
                 ) : (
                     <View style={styles.mediaPlaceholder}>
-                        <Text style={[styles.mediaLabel, { color: iconColor }]}>
+                        <LucidePlay color={iconColor} size={32} />
+                        <Text style={[styles.mediaLabel, { color: iconColor, marginTop: 8 }]}>
                             {message.type === 'GIF' ? 'GIF' : 'Photo'}
                         </Text>
                     </View>
                 )}
                 <View style={styles.mediaLabelContainer}>
-                    <Text style={styles.mediaLabel}>{message.type === 'GIF' ? 'GIF' : 'Photo'}</Text>
+                    <Text style={styles.mediaLabel}>
+                        {message.type === 'GIF' ? 'GIF' : 'Photo'}
+                    </Text>
                 </View>
             </Pressable>
         );
     }
 
+    if (message.type === 'VIDEO') {
+        return (
+            <VideoBubble 
+                uri={mediaUrl || ''} 
+                isMine={isMine} 
+                onExpand={handleMediaPress} 
+            />
+        );
+    }
+
     switch (message.type) {
         case 'AUDIO':
+        case 'VOICE':
             return (
                 <AudioPlayerBubble
                     uri={mediaUrl || ''}
+                    voiceDuration={message.voiceDuration}
                     isMine={isMine}
                 />
             );
         case 'DOCUMENT':
+        case 'FILE':
             return (
-                <Pressable onPress={handleMediaPress} style={styles.documentContainer}>
-                    <View style={[styles.docIcon, { backgroundColor: isMine ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.06)' }]}>
-                        <LucideFile color={iconColor} size={22} />
+                <View style={[styles.documentCard, { backgroundColor: isMine ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)' }]}>
+                    <View style={styles.documentContainer}>
+                        <View style={[styles.docIcon, { backgroundColor: '#FF3B30' }]}>
+                            <LucideFile color="#FFF" size={20} strokeWidth={2.5} />
+                        </View>
+                        <View style={styles.docInfo}>
+                            <Text style={[styles.docName, { color: isMine ? '#000' : '#FFF' }]} numberOfLines={1}>
+                                {message.fileName || message.content || 'Document'}
+                            </Text>
+                            <Text style={[styles.docSize, { color: isMine ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]}>
+                                {message.fileSize ? (Number(message.fileSize) / 1024).toFixed(1) + ' KB' : 'PDF Document'}
+                            </Text>
+                        </View>
+                        {!isMine && (
+                            <PressableScale style={styles.downloadBtn} onPress={handleDownload}>
+                                <LucideDownload color={isMine ? "#000" : "#5AC8FA"} size={20} />
+                            </PressableScale>
+                        )}
                     </View>
-                    <View style={styles.docInfo}>
-                        <Text style={[styles.docName, { color: isMine ? '#000' : theme.colors.text.primary }]} numberOfLines={1}>
-                            {message.fileName || message.content || 'Document'}
-                        </Text>
-                        <Text style={[styles.docSize, { color: iconColor }]}>
-                            {message.fileSize || 'Tap to open'}
-                        </Text>
-                    </View>
-                    {message.senderId !== currentUserId && (
-                        <PressableScale style={styles.downloadBtn} onPress={handleDownload}>
-                            <LucideDownload color={iconColor} size={18} />
-                        </PressableScale>
-                    )}
-                </Pressable>
+                </View>
             );
-        case 'LOCATION': {
-            let locData = null;
-            try { locData = message.content ? JSON.parse(message.content) : null; } catch (_e) { /* malformed */ }
-            const lat = locData?.lat || message.latitude;
-            const lng = locData?.lng || message.longitude;
-
-            return (
-                <PressableScale
-                    onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`)}
-                    style={styles.locationContainer}
-                >
-                    <View style={[styles.locationMap, { backgroundColor: isMine ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.04)' }]}>
-                        <LucideMapPin color={iconColor} size={28} />
-                        <Text style={[styles.mapOpenLabel, { color: iconColor }]}>Open in Maps</Text>
-                    </View>
-                    <Text style={[styles.locationLabel, { color: isMine ? 'rgba(0,0,0,0.7)' : theme.colors.text.secondary }]}>
-                        {locData?.live ? '📍 Shared Live Location' : '📍 Shared Location'}
-                    </Text>
-                </PressableScale>
-            );
-        }
-        case 'LIVE_LOCATION': {
-            return <LiveLocationBubble message={message} isMine={isMine} />;
-        }
+        case 'LOCATION':
+        case 'LIVE_LOCATION':
+            return <LocationMessageBubble message={message} isMine={isMine} />;
         case 'CONTACT': {
             let contactData = null;
-            try { contactData = message.content ? JSON.parse(message.content) : null; } catch (_e) { /* malformed */ }
-
-            const handleAddContact = async () => {
-                const contactName = contactData?.name || message.contactName || 'Contact';
-                const contactPhone = contactData?.phoneNumber || message.contactPhone || '';
-
-                try {
-                    const { status } = await Contacts.requestPermissionsAsync();
-                    if (status !== 'granted') {
-                        Alert.alert('Permission needed', 'Contacts permission is required to save contacts.');
-                        return;
-                    }
-
-                    const contact: Contacts.Contact = {
-                        contactType: Contacts.ContactTypes.Person,
-                        name: contactName,
-                        firstName: contactName.split(' ')[0] || contactName,
-                        lastName: contactName.split(' ').slice(1).join(' ') || '',
-                        phoneNumbers: contactPhone ? [
-                            {
-                                label: 'mobile',
-                                number: contactPhone,
-                            },
-                        ] : [],
-                    } as Contacts.Contact;
-
-                    await Contacts.addContactAsync(contact);
-                    Alert.alert('Saved', `${contactName} has been added to your contacts.`);
-                } catch (err) {
-                    console.error('Failed to save contact:', err);
-                    Alert.alert('Error', 'Could not save the contact.');
-                }
-            };
+            try { contactData = message.content ? JSON.parse(message.content) : null; } catch (_e) { }
 
             return (
-                <View style={styles.contactContainer}>
-                    <View style={[styles.contactAvatar, { backgroundColor: isMine ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)' }]}>
-                        <LucideUser color={iconColor} size={22} />
+                <View style={[styles.contactCard, { backgroundColor: isMine ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)' }]}>
+                    <View style={styles.contactHeader}>
+                      <View style={[styles.contactAvatar, { backgroundColor: '#5AC8FA' }]}>
+                          <LucideUser color="#FFF" size={24} />
+                      </View>
+                      <View style={styles.contactInfo}>
+                          <Text style={[styles.contactName, { color: isMine ? '#000' : '#FFF' }]}>
+                              {contactData?.name || message.contactName || 'Contact'}
+                          </Text>
+                          <Text style={[styles.contactPhone, { color: isMine ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]}>
+                              {contactData?.phoneNumber || message.contactPhone || ''}
+                          </Text>
+                      </View>
                     </View>
-                    <View style={styles.contactInfo}>
-                        <Text style={[styles.contactName, { color: isMine ? '#000' : theme.colors.text.primary }]}>
-                            {contactData?.name || message.contactName || 'Contact'}
-                        </Text>
-                        <Text style={[styles.contactPhone, { color: iconColor }]}>
-                            {contactData?.phoneNumber || message.contactPhone || ''}
-                        </Text>
-                    </View>
-                    <PressableScale style={styles.addContactBtn} onPress={handleAddContact}>
-                        <Text style={styles.addContactText}>Add</Text>
+                    <View style={styles.contactDivider} />
+                    <PressableScale 
+                        style={styles.messageContactBtn} 
+                        onPress={() => {
+                            const phone = contactData?.phoneNumber || message.contactPhone;
+                            if (phone) Linking.openURL(`tel:${phone}`);
+                        }}
+                    >
+                        <Text style={styles.messageContactText}>Message</Text>
                     </PressableScale>
                 </View>
             );
@@ -386,14 +433,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                         bubbleRadius,
                     ]}
                 >
-                    {/* Starred indicator */}
                     {(message.isStarred || message.starred) && (
                         <View style={styles.starBadge}>
                             <LucideStar color="#FFD60A" size={10} fill="#FFD60A" />
                         </View>
                     )}
 
-                    {/* Forwarded indicator */}
                     {message.forwarded && (
                         <View style={styles.forwardedIndicator}>
                             <LucideArrowRight color={theme.colors.text.secondary} size={12} />
@@ -401,14 +446,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                         </View>
                     )}
 
-                    {/* Group sender name */}
                     {isGroup && !isMine && isFirstInGroup && senderName && (
                         <Text style={[styles.senderName, { color: getSenderColor(message.senderId) }]}>
                             {senderName}
                         </Text>
                     )}
 
-                    {/* Reply preview */}
                     {replyPreviewText && (
                         <View style={[styles.replyPreview, { borderLeftColor: isMine ? 'rgba(0,0,0,0.2)' : '#5AC8FA' }]}>
                             <Text style={[styles.replyText, { color: isMine ? 'rgba(0,0,0,0.55)' : theme.colors.text.secondary }]} numberOfLines={1}>
@@ -417,11 +460,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                         </View>
                     )}
 
-                    {/* Media content */}
                     {message.type !== 'TEXT' && <MediaContent message={message} isMine={isMine} />}
 
-                    {/* Text content - skip for media-only types that use text differently */}
-                    {message.content && !['LOCATION', 'LIVE_LOCATION', 'CONTACT', 'AUDIO', 'GIF', 'LINK'].includes(message.type || '') && (
+                    {message.content && !['IMAGE', 'VIDEO', 'LOCATION', 'LIVE_LOCATION', 'CONTACT', 'AUDIO', 'VOICE', 'DOCUMENT', 'FILE', 'GIF', 'LINK'].includes(message.type || '') && (
                         <Text
                             style={[
                                 styles.text,
@@ -443,7 +484,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                         </Text>
                     )}
 
-                    {/* Time + status */}
                     <View style={styles.footer}>
                         {message.edited && (
                             <Text style={[styles.time, { color: isMine ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.28)', fontStyle: 'italic', marginRight: 4 }]}>
@@ -456,16 +496,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                         {isMine && <StatusTicks message={message} />}
                     </View>
 
-                    {/* Reactions */}
                     {message.reactions && Object.keys(message.reactions).length > 0 && (
                         <View style={[
                             styles.reactionsContainer,
                             isMine ? styles.reactionsMine : styles.reactionsOther
                         ]}>
                             {(() => {
-                                // Group by emoji: {emoji: count}
                                 const emojiCounts: Record<string, number> = {};
-                                Object.values(message.reactions!).forEach((emoji: string) => {
+                                Object.values(message.reactions!).forEach((emoji: any) => {
                                     emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
                                 });
                                 return Object.entries(emojiCounts).map(([emoji, count]) => (
@@ -519,10 +557,6 @@ const styles = StyleSheet.create({
     },
     bubbleMine: {
         backgroundColor: '#FFFFFF',
-        shadowColor: '#FFF', // Glow effect for white bubble
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
         elevation: 5,
     },
     bubbleOther: {
@@ -596,24 +630,35 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     imageContainer: {
-        width: 220,
-        height: 220,
+        width: 260,
+        height: 260,
         borderRadius: 12,
         overflow: 'hidden',
         marginBottom: 4,
     },
-    image: {
+    videoContainer: {
+        width: 260,
+        height: 260,
+        borderRadius: 12,
+        overflow: 'hidden',
+        marginBottom: 4,
+        backgroundColor: '#000',
+    },
+    inlineVideo: {
+        width: '100%',
+        height: '100%',
+    },
+    chatImage: {
         width: '100%',
         height: '100%',
     },
     mediaPlaceholder: {
-        width: 200,
-        height: 140,
+        width: '100%',
+        height: '100%',
         backgroundColor: 'rgba(128,128,128,0.08)',
         borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 6,
     },
     mediaLabelContainer: {
         position: 'absolute',
@@ -637,42 +682,22 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    // Voice
-    voiceContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        minWidth: 200,
-    },
-    playBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: 'rgba(128,128,128,0.2)',
+    videoOverlay: {
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.1)',
     },
-    waveform: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 1.5,
-        height: 30,
+    documentCard: {
+        width: 240,
+        borderRadius: 12,
+        padding: 10,
+        marginBottom: 4,
     },
-    waveBar: {
-        width: 2.5,
-        borderRadius: 2,
-    },
-    voiceDuration: {
-        fontSize: 11,
-        fontWeight: '500',
-    },
-    // Document
     documentContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        marginBottom: 4,
     },
     docIcon: {
         width: 40,
@@ -692,39 +717,24 @@ const styles = StyleSheet.create({
         fontSize: 11,
         marginTop: 2,
     },
-    // Location
-    locationContainer: {
+    downloadBtn: {
+        padding: 8,
+    },
+    contactCard: {
+        width: 240,
+        borderRadius: 12,
+        padding: 12,
         marginBottom: 4,
     },
-    locationMap: {
-        width: 200,
-        height: 120,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 4,
-        gap: 8,
-    },
-    mapOpenLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    locationLabel: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    // Contact card
-    contactContainer: {
+    contactHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        marginBottom: 4,
-        minWidth: 200,
+        gap: 12,
     },
     contactAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -732,26 +742,27 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     contactName: {
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '600',
     },
     contactPhone: {
-        fontSize: 12,
+        fontSize: 13,
         marginTop: 2,
     },
-    addContactBtn: {
-        paddingVertical: 4,
-        paddingHorizontal: 10,
-        borderRadius: 6,
-        backgroundColor: 'rgba(128,128,128,0.15)',
+    contactDivider: {
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        marginVertical: 10,
     },
-    addContactText: {
-        fontSize: 12,
-        fontWeight: '600',
+    messageContactBtn: {
+        paddingVertical: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    messageContactText: {
+        fontSize: 14,
+        fontWeight: '700',
         color: '#5AC8FA',
-    },
-    downloadBtn: {
-        padding: 8,
     },
     reactionsContainer: {
         flexDirection: 'row',
@@ -785,19 +796,19 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '600',
     },
-    // Link preview
     linkContainer: {
         marginBottom: 4,
         borderRadius: 10,
         overflow: 'hidden',
+        width: 240,
     },
     linkImage: {
-        width: 220,
-        height: 120,
-        borderRadius: 10,
+        width: '100%',
+        height: 140,
     },
     linkInfo: {
-        paddingTop: 6,
+        paddingTop: 8,
+        paddingHorizontal: 4,
         gap: 2,
     },
     linkTitle: {
@@ -811,6 +822,27 @@ const styles = StyleSheet.create({
     linkUrl: {
         fontSize: 11,
         marginTop: 2,
+    },
+    fullScreenVideoContainer: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
+    },
+    fullScreenVideo: {
+        width: '100%',
+        height: '100%',
+    },
+    closeBtn: {
+        position: 'absolute',
+        top: 40,
+        right: 20,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
     },
 });
 

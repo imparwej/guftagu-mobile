@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { chatSocketService } from '../socket/chatSocket';
-import { updateBuddyLocation, clearBuddyLocations } from '../store/slices/locationSlice';
+import { updateUserLocation, clearUserLocations } from '../store/slices/locationSlice';
 
 export const useLiveLocation = (conversationId: string | null) => {
     const dispatch = useDispatch();
@@ -12,30 +12,28 @@ export const useLiveLocation = (conversationId: string | null) => {
         const destination = `/topic/location/${conversationId}`;
         
         const subscription = chatSocketService.subscribe(destination, (payload: any) => {
-            if (payload.type === 'LIVE_LOCATION' && payload.latitude && payload.longitude) {
-                dispatch(updateBuddyLocation({
-                    userId: payload.userId || payload.senderId,
+            console.log(`[useLiveLocation] Received update on ${destination}:`, payload);
+            if (payload.type === 'LIVE_LOCATION_UPDATE' && payload.latitude && payload.longitude) {
+                dispatch(updateUserLocation({
+                    userId: payload.userId,
                     latitude: payload.latitude,
                     longitude: payload.longitude,
-                    timestamp: Date.now(),
-                    conversationId: payload.conversationId,
-                    // If backend provides name/avatar in broadcast, we can add them here
-                    name: payload.senderName,
-                    avatar: payload.senderAvatar
+                    name: payload.name,
+                    avatar: payload.avatar,
+                    timestamp: payload.timestamp || Date.now(),
+                    conversationId: payload.conversationId || conversationId,
                 }));
             }
         });
 
         return () => {
             chatSocketService.unsubscribe(destination);
-            // Optional: clear on unmount? 
-            // Better to keep in Redux for the duration of the app session or use a separate cleanup
         };
     }, [conversationId, dispatch]);
 
     const clearLocations = () => {
         if (conversationId) {
-            dispatch(clearBuddyLocations(conversationId));
+            dispatch(clearUserLocations(conversationId));
         }
     };
 

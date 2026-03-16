@@ -294,7 +294,15 @@ const ChatListScreen = ({ navigation }: any) => {
                 >
                     {/* Avatar */}
                     <View style={styles.avatarContainer}>
-                        <Image source={{ uri: displayAvatar }} style={styles.avatar} />
+                        {item.otherUser?.profilePicture ? (
+                            <Image source={{ uri: item.otherUser.profilePicture }} style={styles.avatar} />
+                        ) : (
+                            <View style={[styles.avatar, styles.avatarFallback]}>
+                                <Text style={styles.avatarInitial}>
+                                    {(item.name || item.otherUser?.name || '?').charAt(0).toUpperCase()}
+                                </Text>
+                            </View>
+                        )}
                         {isSelected && (
                             <Animated.View entering={FadeIn.duration(150)} style={styles.checkOverlay}>
                                 <Check size={16} color="#000" strokeWidth={3} />
@@ -899,6 +907,16 @@ const styles = StyleSheet.create({
     },
     dropdownItemLast: {
         borderBottomWidth: 0,
+    },
+    avatarFallback: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarInitial: {
+        color: '#FFFFFF',
+        fontSize: 20,
+        fontWeight: '700',
     },
     dropdownText: {
         color: 'rgba(255,255,255,0.85)',

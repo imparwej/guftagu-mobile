@@ -15,8 +15,9 @@ import ContactListScreen from '../screens/chats/ContactListScreen';
 import ContactShareScreen from '../screens/chats/ContactShareScreen';
 import ForwardMessageScreen from '../screens/chats/ForwardMessageScreen';
 import GroupInfoScreen from '../screens/chats/GroupInfoScreen';
-import LocationShareScreen from '../screens/chats/LocationShareScreen';
+import LocationScreen from '../screens/chats/LocationScreen';
 import LiveLocationMap from '../screens/chats/LiveLocationMap';
+import LocationRouteMap from '../screens/chats/LocationRouteMap';
 import MediaLinksDocsScreen from '../screens/chats/MediaLinksDocsScreen';
 import MediaPreviewScreen from '../screens/chats/MediaPreviewScreen';
 import StarredMessagesScreen from '../screens/chats/StarredMessagesScreen';
@@ -112,13 +113,18 @@ const RootNavigator = () => {
                         options={{ presentation: 'fullScreenModal', animation: 'fade' }}
                     />
                     <Stack.Screen
-                        name="LocationShare"
-                        component={LocationShareScreen}
+                        name="Location"
+                        component={LocationScreen}
                         options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
                     />
                     <Stack.Screen
                         name="LiveLocationMap"
                         component={LiveLocationMap}
+                        options={{ animation: 'slide_from_right' }}
+                    />
+                    <Stack.Screen
+                        name="LocationRouteMap"
+                        component={LocationRouteMap}
                         options={{ animation: 'slide_from_right' }}
                     />
                     <Stack.Screen

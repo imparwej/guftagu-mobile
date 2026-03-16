@@ -18,7 +18,7 @@ export interface Message {
     conversationId: string;
     senderId: string;
     receiverId: string;
-    type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'LOCATION' | 'LIVE_LOCATION' | 'CONTACT' | 'GIF' | 'LINK';
+    type: 'TEXT' | 'IMAGE' | 'AUDIO' | 'DOCUMENT' | 'LOCATION' | 'LIVE_LOCATION' | 'CONTACT' | 'GIF' | 'LINK' | 'VIDEO' | 'VOICE' | 'FILE';
     content: string;
     mediaUrl?: string;
     mediaUri?: string; // UI local uri
@@ -31,7 +31,7 @@ export interface Message {
     isStarred?: boolean; // Keep for legacy state until refactored
     forwarded?: boolean;
     fileName?: string;
-    fileSize?: string;
+    fileSize?: number | string;
     latitude?: number;
     longitude?: number;
     contactName?: string;

@@ -9,7 +9,8 @@ interface LocationMapProps {
     onLocationSelect?: (lat: number, lng: number) => void;
     showControls?: boolean;
     style?: any;
-    markers?: Array<{id: string, lat: number, lng: number, title?: string}>;
+    markers?: Array<{id: string, lat: number, lng: number, title?: string, avatar?: string}>;
+    history?: Record<string, Array<{ latitude: number, longitude: number }>>;
 }
 
 const LocationMap: React.FC<LocationMapProps> = ({ 
@@ -19,7 +20,8 @@ const LocationMap: React.FC<LocationMapProps> = ({
     onLocationSelect,
     showControls = true,
     style,
-    markers = []
+    markers = [],
+    history = {}
 }) => {
     const webViewRef = useRef<WebView>(null);
     const [loading, setLoading] = useState(true);
@@ -49,6 +51,7 @@ const LocationMap: React.FC<LocationMapProps> = ({
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
                 var markers = {};
+                var polylines = {};
                 var mainMarker = L.marker([${latitude}, ${longitude}]).addTo(map);
 
                 function createAvatarIcon(url, name) {
@@ -58,7 +61,7 @@ const LocationMap: React.FC<LocationMapProps> = ({
                         : '<div style="width: 36px; height: 36px; border-radius: 18px; border: 2px solid white; background: #34C759; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">' + initials + '</div>';
                     
                     return L.divIcon({
-                        html: '<div style="position: relative;">' + content + '<div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid white;"></div></div>',
+                        html: '<div style="position: relative; transition: all 0.5s linear;">' + content + '<div style="position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid white;"></div></div>',
                         className: '',
                         iconSize: [36, 36],
                         iconAnchor: [18, 41]
@@ -72,11 +75,43 @@ const LocationMap: React.FC<LocationMapProps> = ({
 
                 function addOrUpdateMarker(id, lat, lng, title, avatar) {
                     if (markers[id]) {
-                        markers[id].setLatLng([lat, lng]);
+                        // Interpolate movement
+                        var startLat = markers[id].getLatLng().lat;
+                        var startLng = markers[id].getLatLng().lng;
+                        var duration = 1000;
+                        var start = null;
+
+                        function animate(timestamp) {
+                            if (!start) start = timestamp;
+                            var progress = (timestamp - start) / duration;
+                            if (progress > 1) progress = 1;
+
+                            var currentLat = startLat + (lat - startLat) * progress;
+                            var currentLng = startLng + (lng - startLng) * progress;
+                            markers[id].setLatLng([currentLat, currentLng]);
+
+                            if (progress < 1) {
+                                requestAnimationFrame(animate);
+                            }
+                        }
+                        requestAnimationFrame(animate);
                     } else {
                         const icon = createAvatarIcon(avatar, title);
                         markers[id] = L.marker([lat, lng], { icon: icon }).addTo(map);
                         if (title) markers[id].bindPopup(title);
+                    }
+                }
+
+                function updatePolyline(id, points) {
+                    if (polylines[id]) {
+                        polylines[id].setLatLngs(points);
+                    } else {
+                        polylines[id] = L.polyline(points, {
+                            color: '#25D366', // WhatsApp Green
+                            weight: 4,
+                            opacity: 0.8,
+                            lineJoin: 'round'
+                        }).addTo(map);
                     }
                 }
 
@@ -95,11 +130,15 @@ const LocationMap: React.FC<LocationMapProps> = ({
                     if (data.type === 'UPDATE_LOCATION') {
                         updateMarker(data.lat, data.lng);
                     } else if (data.type === 'SYNC_MARKERS') {
-                        // Clear old markers if they are not in the new sync
-                        // (Optional: for now we just add/update)
                         data.markers.forEach(m => addOrUpdateMarker(m.id, m.lat, m.lng, m.title, m.avatar));
+                    } else if (data.type === 'SYNC_HISTORY') {
+                        // data.history = { userId: [{lat, lng}, ...] }
+                        Object.keys(data.history).forEach(userId => {
+                            updatePolyline(userId, data.history[userId]);
+                        });
                     }
                 });
+
             </script>
         </body>
         </html>
@@ -123,6 +162,23 @@ const LocationMap: React.FC<LocationMapProps> = ({
             }));
         }
     }, [markers]);
+
+    useEffect(() => {
+        if (webViewRef.current && history && Object.keys(history).length > 0) {
+            // Transform history for Leaflet (Array of [lat, lng])
+            const transformedHistory: Record<string, any> = {};
+            Object.keys(history).forEach(userId => {
+                if (history[userId]) {
+                    transformedHistory[userId] = history[userId].map(p => [p.latitude, p.longitude]);
+                }
+            });
+
+            webViewRef.current.postMessage(JSON.stringify({
+                type: 'SYNC_HISTORY',
+                history: transformedHistory
+            }));
+        }
+    }, [history]);
 
     const onMessage = (event: any) => {
         try {

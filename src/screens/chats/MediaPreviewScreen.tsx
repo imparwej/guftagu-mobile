@@ -1,6 +1,7 @@
 import { LucideDownload, LucideX } from 'lucide-react-native';
 import React from 'react';
 import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 const { width, height } = Dimensions.get('window');
 
@@ -11,6 +12,11 @@ interface MediaPreviewScreenProps {
 
 const MediaPreviewScreen: React.FC<MediaPreviewScreenProps> = ({ navigation, route }) => {
     const { uri, type } = route.params || {};
+
+    const player = useVideoPlayer(uri, (player) => {
+        player.loop = true;
+        player.play();
+    });
 
     return (
         <View style={styles.container}>
@@ -26,6 +32,13 @@ const MediaPreviewScreen: React.FC<MediaPreviewScreenProps> = ({ navigation, rou
             <View style={styles.content}>
                 {type === 'IMAGE' || type === 'GIF' ? (
                     <Image source={{ uri }} style={styles.image} resizeMode="contain" />
+                ) : type === 'VIDEO' ? (
+                    <VideoView
+                        style={styles.video}
+                        player={player}
+                        allowsFullscreen
+                        allowsPictureInPicture
+                    />
                 ) : (
                     <Text style={{ color: '#FFF' }}>Preview not available for this type</Text>
                 )}
@@ -71,6 +84,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     image: {
+        width: width,
+        height: height * 0.8,
+    },
+    video: {
         width: width,
         height: height * 0.8,
     },

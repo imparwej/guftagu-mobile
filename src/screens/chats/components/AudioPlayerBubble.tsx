@@ -1,6 +1,6 @@
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import * as Audio from 'expo-audio';
 import { LucidePause, LucidePlay } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -11,14 +11,15 @@ import Animated, {
 
 interface AudioPlayerBubbleProps {
     uri: string;
-    duration?: string;
+    voiceDuration?: number;
     isMine: boolean;
 }
 
-const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) => {
-    const [shouldLoad, setShouldLoad] = useState(false);
-    const player = useAudioPlayer(shouldLoad ? uri : null);
-    const status = useAudioPlayerStatus(player);
+const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, voiceDuration, isMine }) => {
+    const player = Audio.useAudioPlayer(uri);
+    const status = Audio.useAudioPlayerStatus(player);
+    const [duration, setDuration] = useState(0);
+    const [position, setPosition] = useState(0);
 
     const waveAnim = useSharedValue(1);
 
@@ -37,23 +38,19 @@ const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) =>
         }
     }, [status.playing]);
 
-    // Automatically play when loaded if requested
     useEffect(() => {
-        if (shouldLoad && status.isLoaded && !status.playing && !status.didJustFinish) {
-            // Play automatically when loaded for the first time
-            player.play();
+        if (status.duration) {
+            setDuration(status.duration);
         }
-    }, [shouldLoad, status.isLoaded]);
+        if (status.currentTime) {
+            setPosition(status.currentTime);
+        }
+    }, [status.duration, status.currentTime]);
 
     const playPause = () => {
-        if (!shouldLoad) {
-            setShouldLoad(true);
-        } else if (status.playing) {
+        if (status.playing) {
             player.pause();
         } else {
-            if (status.didJustFinish) {
-                player.seekTo(0);
-            }
             player.play();
         }
     };
@@ -65,7 +62,7 @@ const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) =>
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
     };
 
-    const progress = status.duration > 0 ? (status.currentTime / status.duration) * 100 : 0;
+    const progress = duration > 0 ? (position / duration) * 100 : 0;
 
     return (
         <View style={[styles.container, isMine ? styles.mine : styles.other]}>
@@ -101,7 +98,7 @@ const AudioPlayerBubble: React.FC<AudioPlayerBubbleProps> = ({ uri, isMine }) =>
                     ))}
                 </View>
                 <Text style={[styles.duration, { color: isMine ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.6)' }]}>
-                    {formatTime(status.playing ? status.currentTime : status.duration || 0)}
+                    {formatTime(status.playing ? position : ((duration) || voiceDuration || 0))}
                 </Text>
             </View>
         </View>

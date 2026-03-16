@@ -57,7 +57,8 @@ export const uploadFile = async (
     const ext = match ? match[1].toLowerCase() : '';
 
     let mimeType = 'image/jpeg';
-    if (type === 'audio') mimeType = 'audio/m4a';
+    if (type === 'audio' || type === 'voice') mimeType = 'audio/mpeg';
+    else if (type === 'video') mimeType = 'video/mp4';
     else if (type === 'document') {
         const docMimes: Record<string, string> = {
             pdf: 'application/pdf',
@@ -69,6 +70,7 @@ export const uploadFile = async (
         mimeType = docMimes[ext] || 'application/octet-stream';
     } else if (ext === 'png') mimeType = 'image/png';
     else if (ext === 'gif') mimeType = 'image/gif';
+    else if (ext === 'mp4' || ext === 'mov') mimeType = 'video/mp4';
 
     formData.append('file', {
         uri: fileUri,
@@ -77,7 +79,7 @@ export const uploadFile = async (
     } as any);
 
     try {
-        const response = await apiClient.post(`/upload/${type}`, formData, {
+        const response = await apiClient.post('/api/media/upload', formData, {
             headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'multipart/form-data',
@@ -87,7 +89,7 @@ export const uploadFile = async (
             },
             onUploadProgress: (progressEvent) => {
                 if (onUploadProgress && progressEvent.total) {
-                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    const percentCompleted = Math.min(100, Math.round((progressEvent.loaded * 100) / progressEvent.total));
                     onUploadProgress(percentCompleted);
                 }
             },

@@ -1,32 +1,42 @@
 import * as Location from 'expo-location';
 import { chatSocketService } from '../socket/chatSocket';
+import { store } from '../store/store';
+import { startSharing, stopSharing } from '../store/slices/locationSlice';
 
 class LiveLocationService {
   private subscription: Location.LocationSubscription | null = null;
-  public isSharing = false;
   private durationTimeout: NodeJS.Timeout | null = null;
-  public activeChatId: string | null = null;
+  public isSharing = false;
 
-  async startSharing(chatId: string, senderId: string, durationMinutes: number) {
+  async startLiveSharing(conversationId: string, senderId: string, durationMinutes: number) {
     if (this.isSharing) {
-      await this.stopSharing();
+      await this.stopLiveSharing();
     }
 
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return false;
 
-    this.isSharing = true;
-    this.activeChatId = chatId;
-    const expiresAt = Date.now() + durationMinutes * 60 * 1000;
-
-    // Send initial immediately
+    // Get current position BEFORE starting to ensure no undefined coords
+    let initialLocation: Location.LocationObject;
     try {
-      const loc = await Location.getCurrentPositionAsync({});
-      this.sendUpdate(loc, chatId, senderId, expiresAt);
+      initialLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
     } catch (e) {
-      console.warn("Could not get initial location", e);
+      console.error("[LiveLocationService] Failed to get initial location:", e);
+      return false;
     }
 
+    this.isSharing = true;
+    const expiresAt = Date.now() + durationMinutes * 60 * 1000;
+
+    // Sync with Redux
+    store.dispatch(startSharing({ conversationId, expiresAt }));
+
+    // Send initial update immediately
+    this.sendUpdate(initialLocation, conversationId, senderId);
+
+    // Start watching
     this.subscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Balanced,
@@ -35,34 +45,49 @@ class LiveLocationService {
       },
       (location) => {
         if (Date.now() > expiresAt) {
-          this.stopSharing();
+          this.stopLiveSharing();
           return;
         }
-        this.sendUpdate(location, chatId, senderId, expiresAt);
+        this.sendUpdate(location, conversationId, senderId);
       }
     );
 
+    // Auto-stop timeout
     this.durationTimeout = setTimeout(() => {
-      this.stopSharing();
+      this.stopLiveSharing();
     }, durationMinutes * 60 * 1000);
 
     return true;
   }
 
-  private sendUpdate(location: Location.LocationObject, chatId: string, senderId: string, expiresAt: number) {
-    chatSocketService.sendMessage(`/app/chat.liveLocation`, {
-      type: 'LIVE_LOCATION',
+  private sendUpdate(location: Location.LocationObject, conversationId: string, userId: string) {
+    if (!location || !location.coords) {
+      console.warn("[LiveLocationService] Attempted to send update with missing location data");
+      return;
+    }
+
+    const user = store.getState().auth.user;
+    const payload = {
+      type: 'LIVE_LOCATION_UPDATE',
+      conversationId,
+      userId,
+      name: user?.name,
+      avatar: user?.avatar,
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
-      conversationId: chatId, // Map to what Message model normally expects
-      senderId,
-      expiresAt
-    });
+      timestamp: Date.now()
+    };
+    
+    console.log("[LiveLocationService] Sending update:", payload);
+    chatSocketService.sendMessage(`/app/chat.liveLocation`, payload);
   }
 
-  async stopSharing() {
+  async stopLiveSharing() {
     this.isSharing = false;
-    this.activeChatId = null;
+    
+    // Sync with Redux
+    store.dispatch(stopSharing());
+
     if (this.subscription) {
       this.subscription.remove();
       this.subscription = null;

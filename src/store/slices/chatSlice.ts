@@ -39,14 +39,24 @@ const chatSlice = createSlice({
             state.activeChatId = action.payload;
         },
         addMessage: (state, action: PayloadAction<Message>) => {
-            const { conversationId } = action.payload;
+            const message = action.payload;
+            const conversationId = message.conversationId || (message as any).chatId || (message as any).roomId;
+            
+            if (!conversationId) {
+                console.warn("[chatSlice] Received message without conversation identifier:", message);
+                return;
+            }
+
+            // Normalize internal state mapping
+            if (!message.conversationId) message.conversationId = conversationId;
+
             if (!state.messages[conversationId]) {
                 state.messages[conversationId] = [];
             }
-            // Check if message already exists (duplicate prevention)
-            const exists = state.messages[conversationId].find(m => m.id === action.payload.id);
+            
+            const exists = state.messages[conversationId].find(m => m.id === message.id);
             if (!exists) {
-                state.messages[conversationId].push(action.payload);
+                state.messages[conversationId].push(message);
             }
 
             // Update chat list summary
@@ -183,8 +193,11 @@ const chatSlice = createSlice({
             }
         },
         addChat: (state, action: PayloadAction<Chat>) => {
-            if (!state.chats.find(c => c.id === action.payload.id)) {
-                state.chats.unshift(action.payload);
+            const chat = action.payload;
+            const chatId = chat.id || (chat as any).conversationId || (chat as any).chatId;
+            if (chatId && !state.chats.find(c => c.id === chatId)) {
+                if (!chat.id) chat.id = chatId;
+                state.chats.unshift(chat);
             }
         },
         toggleReaction: (state, action: PayloadAction<{ chatId: string; messageId: string; userId: string; emoji: string }>) => {

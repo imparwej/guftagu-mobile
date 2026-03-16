@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { chatSocketService } from '../socket/chatSocket';
 import { store } from '../store/store';
-import { startSharing as startSharingAction, stopSharing as stopSharingAction } from '../store/slices/locationSlice';
+import { startSharing, stopSharing } from '../store/slices/locationSlice';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 
@@ -44,7 +44,7 @@ class LocationServiceClass {
         const expiresAt = Date.now() + durationInSeconds * 1000;
         
         // Update Redux
-        store.dispatch(startSharingAction({ conversationId, expiresAt }));
+        store.dispatch(startSharing({ conversationId, expiresAt }));
         this.isTracking = true;
 
         const user = store.getState().auth.user;
@@ -96,33 +96,33 @@ class LocationServiceClass {
     async stopSharing() {
         if (!this.isTracking) return;
         
-        const sharing = store.getState().location.activeSharing;
+        const sharing = store.getState().location.activeLiveLocation;
         if (sharing) {
             // Send final update? Or just stop
         }
 
         await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-        store.dispatch(stopSharingAction());
+        store.dispatch(stopSharing());
         this.isTracking = false;
     }
 
     sendLocationUpdate(latitude: number, longitude: number) {
         const state = store.getState();
-        const activeSharing = state.location.activeSharing;
+        const activeLiveLocation = state.location.activeLiveLocation;
         const user = state.auth.user;
         
-        if (!activeSharing || !user || Date.now() > activeSharing.expiresAt) {
+        if (!activeLiveLocation || !user || Date.now() > activeLiveLocation.expiresAt) {
             this.stopSharing();
             return;
         }
 
         const payload = {
-            conversationId: activeSharing.conversationId,
+            conversationId: activeLiveLocation.conversationId,
             userId: user.id, // Requested field
             senderId: user.id,
             latitude,
             longitude,
-            expiresAt: activeSharing.expiresAt,
+            expiresAt: activeLiveLocation.expiresAt,
             type: 'LIVE_LOCATION'
         };
 
