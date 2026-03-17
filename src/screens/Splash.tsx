@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store/store';
+import { encryptionService } from '../services/encryptionService';
 
 const { width } = Dimensions.get('window');
 
@@ -55,7 +56,7 @@ const Dot = ({ delay, masterOpacity }: { delay: number; masterOpacity: SharedVal
 
 // ─── Main Splash Screen ───────────────────────────────────────────────────────
 const SplashScreen = ({ navigation }: any) => {
-    const { profileCompleted } = useSelector((state: RootState) => state.auth);
+    const { profileCompleted, user: currentUser } = useSelector((state: RootState) => state.auth);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Shared values
@@ -67,13 +68,21 @@ const SplashScreen = ({ navigation }: any) => {
     const bubbleOpacity = useSharedValue(0);    // ghost bubble behind logo
     const exitOpacity = useSharedValue(1);     // whole-screen fade-out layer
 
-    const navigate = useCallback(() => {
+    const navigate = useCallback(async () => {
+        if (currentUser?.id) {
+            try {
+                await encryptionService.initialize(currentUser.id);
+            } catch (err) {
+                console.warn('[SplashScreen] E2EE Init failed:', err);
+            }
+        }
+
         if (profileCompleted) {
             navigation.replace('Main');
         } else {
             navigation.replace('Welcome');
         }
-    }, [profileCompleted, navigation]);
+    }, [profileCompleted, navigation, currentUser?.id]);
 
     useEffect(() => {
         // ── PHASE 1  (0 → 800 ms): Logo appears ──────────────────────────────

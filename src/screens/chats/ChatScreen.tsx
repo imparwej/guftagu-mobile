@@ -22,6 +22,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { blockUser as blockUserApi, clearChatForUser, deleteMessageApi, editMessageApi, getLinkPreview, getMessages, markAsRead, reactToMessage, toggleStarMessageApi, unblockUser as unblockUserApi, uploadFile } from '../../api/chatApi';
 import { API_BASE_URL } from '../../config/api';
 import { liveLocationService } from '../../services/LiveLocationService';
+import { encryptionService } from '../../services/encryptionService';
 import { chatSocketService } from '../../socket/chatSocket';
 import {
     addMessage,
@@ -52,6 +53,49 @@ import MessageLongPressMenu from './components/MessageLongPressMenu';
 import TypingIndicator from './components/TypingIndicator';
 import VoiceRecorder from './components/VoiceRecorder';
 import WallpaperPicker from './components/WallpaperPicker';
+
+const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
+const getDateLabel = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    
+    // Reset hours to compare dates only
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (msgDate.getTime() === today.getTime()) {
+        return 'Today';
+    }
+    if (msgDate.getTime() === yesterday.getTime()) {
+        return 'Yesterday';
+    }
+    
+    const diffDays = Math.floor((today.getTime() - msgDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 7) {
+        return date.toLocaleDateString([], { weekday: 'long' });
+    }
+    
+    return date.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
+const DateSeparator = ({ label }: { label: string }) => (
+    <View style={styles.dateSeparatorContainer}>
+        <View style={styles.dateSeparatorLine} />
+        <View style={styles.dateSeparatorBadge}>
+            <Text style={styles.dateSeparatorText}>{label}</Text>
+        </View>
+        <View style={styles.dateSeparatorLine} />
+    </View>
+);
 
 const AUTO_REPLIES = [
     'Got it, thanks! 👍',
@@ -120,7 +164,22 @@ const ChatScreen = ({ navigation, route }: any) => {
             if (activeChatId) {
                 try {
                     const data = await getMessages(activeChatId, currentUser?.id);
-                    dispatch(setMessages({ chatId: activeChatId, messages: data }));
+                    
+                    // Decrypt messages if they are encrypted
+                    const decryptedData = await Promise.all(data.map(async (msg: Message) => {
+                        if (msg.isEncrypted && msg.encryptedMessage && msg.encryptedAESKey) {
+                            try {
+                                const decryptedContent = await encryptionService.decryptMessage(msg.encryptedMessage, msg.encryptedAESKey);
+                                return { ...msg, content: decryptedContent, isEncrypted: true };
+                            } catch (err) {
+                                console.warn('[ChatScreen] Decryption failed for message:', msg.id, err);
+                                return { ...msg, content: '🔒 [Decryption failed]', decryptionFailed: true };
+                            }
+                        }
+                        return msg;
+                    }));
+
+                    dispatch(setMessages({ chatId: activeChatId, messages: decryptedData }));
                 } catch (error) {
                     console.error('Failed to load messages:', error);
                 }
@@ -180,7 +239,7 @@ const ChatScreen = ({ navigation, route }: any) => {
     useEffect(() => {
         if (!currentUser?.id) return;
 
-        const handleIncomingMessage = (message: Message) => {
+        const handleIncomingMessage = async (message: Message) => {
             // Check if this message already exists (edit/reaction update)
             const existing = store.getState().chat.messages[message.conversationId];
             if (existing && existing.find((m: Message) => m.id === message.id)) {
@@ -189,7 +248,18 @@ const ChatScreen = ({ navigation, route }: any) => {
                 return;
             }
 
-            dispatch(addMessage(message));
+            let processedMsg = message;
+            if (message.isEncrypted && message.encryptedMessage && message.encryptedAESKey) {
+                try {
+                    const decryptedContent = await encryptionService.decryptMessage(message.encryptedMessage, message.encryptedAESKey);
+                    processedMsg = { ...message, content: decryptedContent, isEncrypted: true };
+                } catch (err) {
+                    console.warn('[ChatScreen] Real-time decryption failed:', message.id, err);
+                    processedMsg = { ...message, content: '🔒 [Decryption failed]', decryptionFailed: true };
+                }
+            }
+
+            dispatch(addMessage(processedMsg));
 
             // Auto-save received media
             autoSaveMedia(message);
@@ -299,6 +369,33 @@ const ChatScreen = ({ navigation, route }: any) => {
         if (metadata) {
             messagePayload.type = 'LINK';
             messagePayload.metadata = metadata;
+        }
+
+        // Apply E2EE: Only encrypt if it's a 1-to-1 chat (backend doesn't support groups yet for RSA)
+        // Check displayChat.isGroup just in case
+        if (!isGroup) {
+            try {
+                const { encryptedMessage, encryptedAESKey } = await encryptionService.encryptMessage(messagePayload.content || '', receiverId);
+                messagePayload.encryptedMessage = encryptedMessage;
+                messagePayload.encryptedAESKey = encryptedAESKey;
+                messagePayload.isEncrypted = true;
+                // We keep content for backward compatibility or placeholder, 
+                // but requirement says "Server NEVER decrypts", 
+                // so we can null out the content for security.
+                messagePayload.content = "[Encrypted Content]";
+            } catch (err: any) {
+                console.error('[ChatScreen] Encryption failed:', err);
+                
+                let errorMessage = 'Message could not be encrypted safely.';
+                if (err.message === 'RECIPIENT_KEY_MISSING') {
+                    errorMessage = 'The recipient has not set up their encryption keys yet. They need to open the app to enable E2EE.';
+                } else if (err.message === 'RECIPIENT_NOT_FOUND') {
+                    errorMessage = 'The recipient user was not found.';
+                }
+                
+                Alert.alert('Encryption Error', errorMessage);
+                return;
+            }
         }
 
         // Remove frontend-only fields before sending
@@ -821,8 +918,14 @@ const ChatScreen = ({ navigation, route }: any) => {
         const isMine = item.senderId === currentUser?.id;
         const prevMsg = index > 0 ? chatMessages[index - 1] : null;
         const nextMsg = index < chatMessages.length - 1 ? chatMessages[index + 1] : null;
+        
         const isFirstInGroup = !prevMsg || prevMsg.senderId !== item.senderId;
         const isLastInGroup = !nextMsg || nextMsg.senderId !== item.senderId;
+
+        // Date grouping logic
+        const currentDateLabel = getDateLabel(item.timestamp);
+        const prevDateLabel = prevMsg ? getDateLabel(prevMsg.timestamp) : null;
+        const showDateSeparator = currentDateLabel !== prevDateLabel;
 
         let senderName: string | undefined;
         if (isGroup && !isMine) {
@@ -843,19 +946,22 @@ const ChatScreen = ({ navigation, route }: any) => {
         const isHighlighted = highlightedMessageIds.includes(item.id);
 
         return (
-            <MessageBubble
-                message={item}
-                isMine={isMine}
-                isGroup={isGroup || false}
-                senderName={senderName}
-                isFirstInGroup={isFirstInGroup}
-                isLastInGroup={isLastInGroup}
-                onLongPress={handleMessageLongPress}
-                onSwipeToReply={(message: Message) => setReplyingTo(message)}
-                replyPreviewText={replyPreviewText}
-                isHighlighted={isHighlighted}
-                searchQuery={searchQuery}
-            />
+            <View>
+                {showDateSeparator && <DateSeparator label={currentDateLabel} />}
+                <MessageBubble
+                    message={item}
+                    isMine={isMine}
+                    isGroup={isGroup || false}
+                    senderName={senderName}
+                    isFirstInGroup={isFirstInGroup}
+                    isLastInGroup={isLastInGroup}
+                    onLongPress={handleMessageLongPress}
+                    onSwipeToReply={(message: Message) => setReplyingTo(message)}
+                    replyPreviewText={replyPreviewText}
+                    isHighlighted={isHighlighted}
+                    searchQuery={searchQuery}
+                />
+            </View>
         );
     }, [currentUser, chatMessages, isGroup, handleMessageLongPress, highlightedMessageIds, searchQuery]);
 
@@ -1118,6 +1224,31 @@ const styles = StyleSheet.create({
         color: '#FF9500',
         fontSize: 13,
         fontWeight: '600',
+    },
+    dateSeparatorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 16,
+        paddingHorizontal: 20,
+    },
+    dateSeparatorLine: {
+        flex: 1,
+        height: StyleSheet.hairlineWidth,
+        backgroundColor: 'transparent',
+    },
+    dateSeparatorBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        paddingHorizontal: 16,
+        paddingVertical: 4,
+        borderRadius: 12,
+        borderWidth: 0.5,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    dateSeparatorText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 12,
+        fontWeight: '600',
+        textAlign: 'center',
     },
 });
 

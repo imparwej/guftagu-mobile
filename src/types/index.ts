@@ -11,6 +11,7 @@ export interface User {
     about?: string;
     notes?: string;
     email?: string;
+    publicKey?: string;
 }
 
 export interface Message {
@@ -38,6 +39,12 @@ export interface Message {
     contactPhone?: string;
     voiceDuration?: number;
     reactions?: Record<string, string>; // userId -> emoji (one per user)
+
+    // End-to-End Encryption
+    isEncrypted?: boolean;
+    encryptedMessage?: string;
+    encryptedAESKey?: string;
+    decryptionFailed?: boolean;
 
     // Link preview fields
     url?: string;

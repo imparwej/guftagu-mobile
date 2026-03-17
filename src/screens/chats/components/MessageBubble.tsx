@@ -13,7 +13,8 @@ import {
     LucideStar,
     LucideUser,
     LucidePhone,
-    LucideX
+    LucideX,
+    LucideLock
 } from 'lucide-react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as Audio from 'expo-audio';
@@ -190,7 +191,8 @@ const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message
                 type: 'VIDEO'
             });
         } else if ((message.type === 'DOCUMENT' || message.type === 'FILE') && mediaUrl) {
-            if (mediaUrl.startsWith('http')) {
+            // Document open logic for sender and general tap
+            if (mediaUrl.startsWith('http') || mediaUrl.startsWith('https')) {
                 Linking.openURL(mediaUrl).catch(err => {
                     console.error('Failed to open URL:', err);
                     Alert.alert('Error', 'Could not open document.');
@@ -268,26 +270,28 @@ const MediaContent: React.FC<{ message: Message; isMine: boolean }> = ({ message
         case 'DOCUMENT':
         case 'FILE':
             return (
-                <View style={[styles.documentCard, { backgroundColor: isMine ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)' }]}>
-                    <View style={styles.documentContainer}>
-                        <View style={[styles.docIcon, { backgroundColor: '#FF3B30' }]}>
-                            <LucideFile color="#FFF" size={20} strokeWidth={2.5} />
+                <Pressable onPress={handleMediaPress}>
+                    <View style={[styles.documentCard, { backgroundColor: isMine ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)' }]}>
+                        <View style={styles.documentContainer}>
+                            <View style={[styles.docIcon, { backgroundColor: '#FF3B30' }]}>
+                                <LucideFile color="#FFF" size={20} strokeWidth={2.5} />
+                            </View>
+                            <View style={styles.docInfo}>
+                                <Text style={[styles.docName, { color: isMine ? '#000' : '#FFF' }]} numberOfLines={1}>
+                                    {message.fileName || message.content || 'Document'}
+                                </Text>
+                                <Text style={[styles.docSize, { color: isMine ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]}>
+                                    {message.fileSize ? (Number(message.fileSize) / 1024).toFixed(1) + ' KB' : 'PDF Document'}
+                                </Text>
+                            </View>
+                            {!isMine && (
+                                <PressableScale style={styles.downloadBtn} onPress={handleDownload}>
+                                    <LucideDownload color={isMine ? "#000" : "#5AC8FA"} size={20} />
+                                </PressableScale>
+                            )}
                         </View>
-                        <View style={styles.docInfo}>
-                            <Text style={[styles.docName, { color: isMine ? '#000' : '#FFF' }]} numberOfLines={1}>
-                                {message.fileName || message.content || 'Document'}
-                            </Text>
-                            <Text style={[styles.docSize, { color: isMine ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]}>
-                                {message.fileSize ? (Number(message.fileSize) / 1024).toFixed(1) + ' KB' : 'PDF Document'}
-                            </Text>
-                        </View>
-                        {!isMine && (
-                            <PressableScale style={styles.downloadBtn} onPress={handleDownload}>
-                                <LucideDownload color={isMine ? "#000" : "#5AC8FA"} size={20} />
-                            </PressableScale>
-                        )}
                     </View>
-                </View>
+                </Pressable>
             );
         case 'LOCATION':
         case 'LIVE_LOCATION':
@@ -463,25 +467,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
                     {message.type !== 'TEXT' && <MediaContent message={message} isMine={isMine} />}
 
                     {message.content && !['IMAGE', 'VIDEO', 'LOCATION', 'LIVE_LOCATION', 'CONTACT', 'AUDIO', 'VOICE', 'DOCUMENT', 'FILE', 'GIF', 'LINK'].includes(message.type || '') && (
-                        <Text
-                            style={[
-                                styles.text,
-                                isMine ? styles.textMine : styles.textOther,
-                                message.content === 'This message was deleted' && { fontStyle: 'italic', opacity: 0.6 }
-                            ]}
-                        >
-                            {(() => {
-                                if (!searchQuery || !message.content.toLowerCase().includes(searchQuery.toLowerCase())) {
-                                    return message.content;
-                                }
-                                const parts = message.content.split(new RegExp(`(${searchQuery})`, 'gi'));
-                                return parts.map((part, i) => (
-                                    part.toLowerCase() === searchQuery.toLowerCase() ? (
-                                        <Text key={i} style={styles.highlight}>{part}</Text>
-                                    ) : part
-                                ));
-                            })()}
-                        </Text>
+                        <View style={styles.textWithLock}>
+                            {message.isEncrypted && (
+                                <LucideLock 
+                                    size={12} 
+                                    color={isMine ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)'} 
+                                    style={{ marginRight: 6, marginTop: 4 }} 
+                                />
+                            )}
+                            <Text
+                                style={[
+                                    styles.text,
+                                    isMine ? styles.textMine : styles.textOther,
+                                    (message.content === 'This message was deleted' || message.decryptionFailed) && { fontStyle: 'italic', opacity: 0.6 }
+                                ]}
+                            >
+                                {(() => {
+                                    if (!searchQuery || !message.content.toLowerCase().includes(searchQuery.toLowerCase())) {
+                                        return message.content;
+                                    }
+                                    const parts = message.content.split(new RegExp(`(${searchQuery})`, 'gi'));
+                                    return parts.map((part, i) => (
+                                        part.toLowerCase() === searchQuery.toLowerCase() ? (
+                                            <Text key={i} style={styles.highlight}>{part}</Text>
+                                        ) : part
+                                    ));
+                                })()}
+                            </Text>
+                        </View>
                     )}
 
                     <View style={styles.footer}>
@@ -608,6 +621,10 @@ const styles = StyleSheet.create({
     },
     textOther: {
         color: '#FFFFFF',
+    },
+    textWithLock: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
     },
     footer: {
         flexDirection: 'row',

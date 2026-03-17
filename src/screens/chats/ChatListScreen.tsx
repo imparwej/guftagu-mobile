@@ -57,6 +57,7 @@ import {
 import { RootState } from '../../store/store';
 import { theme } from '../../theme/theme';
 import { Chat, Message } from '../../types';
+import { encryptionService } from '../../services/encryptionService';
 import ChatContextMenu from './ChatContextMenu';
 
 
@@ -145,8 +146,18 @@ const ChatListScreen = ({ navigation }: any) => {
         if (currentUser?.id) {
             chatSocketService.connect(
                 () => {
-                    chatSocketService.subscribe('/user/queue/messages', (message: Message) => {
-                        dispatch(addMessage(message));
+                    chatSocketService.subscribe('/user/queue/messages', async (message: Message) => {
+                        let processedMsg = message;
+                        if (message.isEncrypted && message.encryptedMessage && message.encryptedAESKey) {
+                            try {
+                                const decryptedContent = await encryptionService.decryptMessage(message.encryptedMessage, message.encryptedAESKey);
+                                processedMsg = { ...message, content: decryptedContent, isEncrypted: true };
+                            } catch (err) {
+                                console.warn('[ChatListScreen] Decryption failed for incoming message:', err);
+                                processedMsg = { ...message, content: '🔒 [Encrypted]', decryptionFailed: true };
+                            }
+                        }
+                        dispatch(addMessage(processedMsg));
                     });
                     chatSocketService.subscribe('/topic/presence', (payload: any) => {
                         // The reducer already handles dispatching the state update in chatSocketService,

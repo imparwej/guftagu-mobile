@@ -1,17 +1,29 @@
-import { LucideArrowLeft, LucideFile, LucideImage as LucideImageIcon, LucideLink } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import {
+    LucideArrowLeft,
+    LucideFile,
+    LucideImage as LucideImageIcon,
+    LucideLink,
+    LucidePlay,
+    LucideMic,
+    LucideMapPin,
+    LucideX,
+    LucideVolume2
+} from 'lucide-react-native';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
     FlatList,
     Image,
     Linking,
+    Modal,
     Pressable,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getMediaMessages } from '../../api/chatApi';
 import { API_BASE_URL } from '../../config/api';
@@ -22,6 +34,44 @@ type TabType = typeof TABS[number];
 
 const { width } = Dimensions.get('window');
 const GRID_SIZE = (width - 8) / 3;
+
+const containsURL = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+    return urlRegex.test(text);
+};
+
+// --- VIDEO MODAL COMPONENT ---
+const VideoPlayerModal = ({ uri, visible, onClose }: { uri: string | null; visible: boolean; onClose: () => void }) => {
+    // TASK 7 — STOP VIDEO: Unload video on modal close
+    const player = useVideoPlayer(uri || '', (player) => {
+        if (uri) {
+            player.loop = false;
+            player.play();
+        }
+    });
+
+    if (!uri || !visible) return null;
+
+    return (
+        <Modal visible={visible} animationType="fade" onRequestClose={onClose} transparent={false}>
+            <View style={styles.modalContainer}>
+                {/* TASK 6 — VIDEO PLAY: Open/Close Fullscreen */}
+                <TouchableOpacity style={styles.closeButton} onPress={() => {
+                    player.pause();
+                    onClose();
+                }}>
+                    <LucideX color="#FFF" size={28} />
+                </TouchableOpacity>
+                <VideoView
+                    player={player}
+                    style={styles.fullVideo}
+                    nativeControls={true}
+                    contentFit="contain"
+                />
+            </View>
+        </Modal>
+    );
+};
 
 const MediaLinksDocsScreen = ({ route, navigation }: any) => {
     const { conversationId } = route.params || {};
@@ -34,8 +84,8 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const category = activeTab === 'Media' ? 'media' : activeTab === 'Docs' ? 'docs' : 'links';
-                const result = await getMediaMessages(conversationId, category);
+                // Fetch all messages to filter them locally as per user requirements
+                const result = await getMediaMessages(conversationId, 'all');
                 setData(result || []);
             } catch (err) {
                 console.error('Failed to load media:', err);
@@ -44,24 +94,103 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
             setLoading(false);
         };
         fetchData();
-    }, [conversationId, activeTab]);
+    }, [conversationId]); // Only refetch when conversationId changes
 
-    const renderMediaItem = ({ item }: any) => {
-        const uri = item.mediaUrl ? `${API_BASE_URL}${item.mediaUrl}` : item.mediaUri;
-        return (
-            <Pressable style={styles.mediaItem}>
-                {uri ? (
-                    <Image source={{ uri }} style={styles.mediaImage} resizeMode="cover" />
-                ) : (
-                    <View style={styles.mediaPlaceholder}>
-                        <LucideImageIcon color={theme.colors.text.secondary} size={24} />
+    const filteredData = useMemo(() => {
+        switch (activeTab) {
+            case 'Media':
+                return data.filter(msg =>
+                    msg.type === "IMAGE" ||
+                    msg.type === "VIDEO" ||
+                    msg.type === "VOICE" ||
+                    msg.type === "AUDIO"
+                );
+            case 'Docs':
+                return data.filter(msg =>
+                    msg.type === "DOCUMENT" ||
+                    msg.type === "FILE"
+                );
+            case 'Links':
+                return data.filter(msg => {
+                    if (msg.type === "TEXT" && containsURL(msg.content || '')) return true;
+                    if (msg.type === "LINK") return true;
+                    if (msg.type === "LOCATION") return true;
+                    return false;
+                });
+            default:
+                return [];
+        }
+    }, [data, activeTab]);
+
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+
+    const renderMediaItem = ({ item }: { item: any }) => {
+        // TASK 9 — REMOVE DIRECT MEDIA RENDERING
+        if (!item.mediaUrl && !item.mediaUri && item.type !== 'VOICE' && item.type !== 'AUDIO') return null;
+
+        // TASK 10 — FALLBACK
+        let mediaUrl = item.mediaUrl;
+        let thumbUrl = item.thumbnailUrl;
+
+        const getFullUrl = (url: string) => {
+            if (url && !url.startsWith('http')) {
+                return `${API_BASE_URL}${url}`;
+            }
+            return url;
+        };
+
+        const finalMediaUrl = getFullUrl(mediaUrl || item.mediaUri);
+        const finalThumbUrl = getFullUrl(thumbUrl) || finalMediaUrl;
+
+        if (item.type === 'VOICE' || item.type === 'AUDIO') {
+            return (
+                <TouchableOpacity 
+                    key={item.id} 
+                    style={styles.audioPreview}
+                    onPress={() => {
+                        // TASK 8 — AUDIO: Show icon only, Tap -> open player
+                        if (finalMediaUrl) navigation.navigate('MediaPreview', { uri: finalMediaUrl, type: 'AUDIO' });
+                    }}
+                >
+                    <LucideVolume2 color={theme.colors.accent} size={28} />
+                    <Text style={styles.audioLabel}>Audio</Text>
+                </TouchableOpacity>
+            );
+        }
+
+        if (item.type === 'VIDEO') {
+            return (
+                <TouchableOpacity 
+                    key={item.id} 
+                    style={styles.videoPreviewContainer} 
+                    onPress={() => setSelectedVideo(finalMediaUrl)}
+                >
+                    {/* TASK 5 — MEDIA TAB FIX: Use thumbnail */}
+                    <Image source={{ uri: finalThumbUrl }} style={styles.videoThumbnailStyle} resizeMode="cover" />
+                    <View style={styles.playIconOverlay}>
+                        <LucidePlay color="#FFF" size={32} fill="#FFF" />
                     </View>
-                )}
-            </Pressable>
+                </TouchableOpacity>
+            );
+        }
+
+        // IMAGE
+        return (
+            <TouchableOpacity 
+                key={item.id} 
+                onPress={() => navigation.navigate('MediaPreview', { uri: finalMediaUrl, type: 'IMAGE' })}
+            >
+                {/* TASK 5 — MEDIA TAB FIX: Use thumbnail */}
+                <Image
+                    source={{ uri: finalThumbUrl }}
+                    style={styles.imagePreviewStyle}
+                    resizeMode="cover"
+                />
+            </TouchableOpacity>
         );
     };
 
-    const renderDocItem = ({ item }: any) => (
+    const renderDocItem = ({ item }: { item: any }) => (
         <Pressable style={styles.docItem} onPress={() => {
             if (item.mediaUrl) {
                 Linking.openURL(`${API_BASE_URL}${item.mediaUrl}`);
@@ -77,17 +206,44 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
         </Pressable>
     );
 
-    const renderLinkItem = ({ item }: any) => {
+    const renderLinkItem = ({ item }: { item: any }) => {
+        if (item.type === 'LOCATION') {
+            const data = typeof item.content === 'string' ? (item.content.startsWith('{') ? JSON.parse(item.content) : null) : item.content;
+            const lat = data?.lat || item.latitude;
+            const lng = data?.lng || item.longitude;
+            const googleMapsUrl = `https://maps.google.com/?q=${lat},${lng}`;
+
+            return (
+                <Pressable style={styles.linkItem} onPress={() => Linking.openURL(googleMapsUrl)}>
+                    <View style={styles.locationIconBox}>
+                        <LucideMapPin color={theme.colors.accent} size={24} />
+                    </View>
+                    <View style={styles.linkInfo}>
+                        <Text style={styles.linkTitle}>Shared Location</Text>
+                        <Text style={styles.linkDesc}>{item.locationLabel || 'Tap to open in Google Maps'}</Text>
+                        <Text style={styles.linkUrl}>Open in Maps</Text>
+                    </View>
+                </Pressable>
+            );
+        }
+
         const meta = item.metadata || {};
         const linkUrl = meta.url || item.url || item.content || '';
         const linkTitle = meta.title || item.linkTitle || '';
         const linkDesc = meta.description || item.linkDescription || '';
         const linkImg = meta.image || item.linkImage || '';
 
+        // Extract URL if it's just a text message with a link
+        let finalUrl = linkUrl;
+        if (item.type === 'TEXT' && !linkUrl) {
+            const match = (item.content || '').match(/(https?:\/\/[^\s]+)/gi);
+            if (match) finalUrl = match[0];
+        }
+
+        if (!finalUrl) return null;
+
         return (
-            <Pressable style={styles.linkItem} onPress={() => {
-                if (linkUrl) Linking.openURL(linkUrl);
-            }}>
+            <Pressable style={styles.linkItem} onPress={() => Linking.openURL(finalUrl)}>
                 {linkImg ? (
                     <Image source={{ uri: linkImg }} style={styles.linkImage} resizeMode="cover" />
                 ) : (
@@ -98,7 +254,7 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
                 <View style={styles.linkInfo}>
                     {linkTitle ? <Text style={styles.linkTitle} numberOfLines={1}>{linkTitle}</Text> : null}
                     {linkDesc ? <Text style={styles.linkDesc} numberOfLines={2}>{linkDesc}</Text> : null}
-                    <Text style={styles.linkUrl} numberOfLines={1}>{linkUrl}</Text>
+                    <Text style={styles.linkUrl} numberOfLines={1}>{finalUrl}</Text>
                 </View>
             </Pressable>
         );
@@ -113,7 +269,7 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
             );
         }
 
-        if (data.length === 0) {
+        if (filteredData.length === 0) {
             return (
                 <View style={styles.center}>
                     <Text style={styles.emptyText}>No {activeTab.toLowerCase()} shared yet</Text>
@@ -124,20 +280,19 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
         switch (activeTab) {
             case 'Media':
                 return (
-                    <FlatList
-                        key="media-list"
-                        data={data}
-                        keyExtractor={(item, i) => item.id || String(i)}
-                        renderItem={renderMediaItem}
-                        numColumns={3}
-                        contentContainerStyle={styles.mediaGrid}
-                    />
+                    <View style={styles.mediaGridWrapper}>
+                        {filteredData.map((item, i) => (
+                            <React.Fragment key={item.id || String(i)}>
+                                {renderMediaItem({ item })}
+                            </React.Fragment>
+                        ))}
+                    </View>
                 );
             case 'Docs':
                 return (
                     <FlatList
                         key="docs-list"
-                        data={data}
+                        data={filteredData}
                         keyExtractor={(item, i) => item.id || String(i)}
                         renderItem={renderDocItem}
                         numColumns={1}
@@ -148,7 +303,7 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
                 return (
                     <FlatList
                         key="links-list"
-                        data={data}
+                        data={filteredData}
                         keyExtractor={(item, i) => item.id || String(i)}
                         renderItem={renderLinkItem}
                         numColumns={1}
@@ -187,6 +342,13 @@ const MediaLinksDocsScreen = ({ route, navigation }: any) => {
             <View style={styles.content}>
                 {renderContent()}
             </View>
+
+            {/* TASK 3 & 4 — VIDEO MODAL */}
+            <VideoPlayerModal 
+                uri={selectedVideo} 
+                visible={!!selectedVideo} 
+                onClose={() => setSelectedVideo(null)} 
+            />
         </SafeAreaView>
     );
 };
@@ -250,26 +412,67 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     // Media grid
-    mediaGrid: {
-        padding: 2,
+    mediaGridWrapper: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        padding: 8,
+        gap: 8, // TASK 9 — GRID UI
     },
-    mediaItem: {
-        width: GRID_SIZE,
-        height: GRID_SIZE,
-        padding: 1,
+    imagePreviewStyle: {
+        width: 110,
+        height: 110,
+        borderRadius: 8,
     },
-    mediaImage: {
+    videoPreviewContainer: {
+        width: 110,
+        height: 110,
+        borderRadius: 8,
+        overflow: 'hidden',
+        position: 'relative',
+        backgroundColor: '#000',
+    },
+    videoThumbnailStyle: {
         width: '100%',
         height: '100%',
-        borderRadius: 2,
+        opacity: 0.8,
     },
-    mediaPlaceholder: {
-        width: '100%',
-        height: '100%',
-        backgroundColor: theme.colors.secondary,
-        borderRadius: 2,
+    playIconOverlay: {
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.2)',
+    },
+    audioPreview: {
+        width: 110,
+        height: 110,
+        backgroundColor: 'rgba(90, 200, 250, 0.1)',
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    audioLabel: {
+        fontSize: 10,
+        color: theme.colors.accent,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    // Modal Styles
+    modalContainer: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 40,
+        right: 20,
+        zIndex: 10,
+        padding: 8,
+    },
+    fullVideo: {
+        width: '100%',
+        height: '80%',
     },
     // Docs list
     listContent: {
@@ -343,6 +546,14 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: '#5AC8FA',
         marginTop: 2,
+    },
+    locationIconBox: {
+        width: 56,
+        height: 56,
+        borderRadius: 8,
+        backgroundColor: 'rgba(52, 199, 89, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });
 

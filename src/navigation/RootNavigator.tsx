@@ -26,6 +26,7 @@ import LinkedDevicesScreen from '../screens/devices/LinkedDevicesScreen';
 import StatusViewerScreen from '../screens/status/StatusViewerScreen';
 import { RootState } from '../store/store';
 import { registerForPushNotificationsAsync } from '../utils/pushNotifications';
+import { encryptionService } from '../services/encryptionService';
 import TabNavigator from './TabNavigator';
 
 const Stack = createNativeStackNavigator();
@@ -47,6 +48,11 @@ const RootNavigator = () => {
 
     React.useEffect(() => {
         if (isFullyOnboarded && currentUser?.id) {
+            // Initialize E2EE (Self-healing key generation/sync)
+            encryptionService.initialize(currentUser.id).catch(err => 
+                console.warn('[RootNavigator] E2EE Init failed:', err)
+            );
+
             registerForPushNotificationsAsync().then(token => {
                 if (token) {
                     updateDeviceTokenApi(currentUser.id, token).catch((err: any) =>
